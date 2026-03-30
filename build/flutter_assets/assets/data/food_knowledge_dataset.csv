@@ -1,0 +1,41 @@
+Food_name,Calories (kcal),Protein (g),Carbs (g),Fat (g),Fibre (g),Carbon (kg CO2e/kg),Water (L/kg),Land (m2/kg),Price_estimate (£/kg),Category,Role
+Chicken breast,158,32.1,0,3.24,0,9.87,660,12.22,6.5,Protein,Main protein
+Chicken (ground),133,17.9,0,7.16,0,9.87,660,12.22,5.5,Protein,Main protein
+Pork (ground),228,17.8,0,17.5,0,12.31,1796,17.36,6,Protein,Main protein
+Beef (ground),143,21.1,0.18,6.46,0,99.48,1451,326.21,11.5,Protein,Main protein
+Salmon,197,20.3,0,13.1,0,13.63,3691,8.41,12,Protein,Main protein
+Tuna,85,19,0.08,0.95,0,13.63,3691,8.41,3.5,Protein,Main protein
+Eggs,146,12.3,0.91,10.3,0,4.67,578,6.27,4,Protein,Main protein
+Milk,50,3.36,4.9,1.9,0,3.15,628,8.95,1.4,Dairy,Drink / Base
+Yogurt,78,3.82,5.57,4.48,0,3.15,628,8.95,3,Dairy,Snack / Base
+Cheddar cheese,409,23.3,2.44,34,0,23.88,5605,87.79,8.5,Dairy,Main protein
+Bread (white),267,9.43,49.2,3.59,0,1.57,648,3.85,1.6,Staples,Carbohydrate staple
+Bread (wholemeal),257,12.3,43.1,3.55,6,1.57,648,3.85,1.6,Staples,Carbohydrate staple
+Rice (white),359,7.04,80.3,1.03,0.1,4.45,2248,2.8,1.8,Staples,Carbohydrate staple
+Rice (brown),366,7.25,76.7,3.31,3,4.45,2248,2.8,1.8,Staples,Carbohydrate staple
+Pasta,371,13,74.7,1.51,3.2,1.57,648,3.85,1.5,Staples,Carbohydrate staple
+Oats,379,13.15,67.7,6.52,10.1,2.48,482,7.6,2.5,Staples,Breakfast base
+Potatoes,58,2.57,12.4,0.1,2.5,0.46,59,0.88,1.2,Staples,Carbohydrate staple
+Sweet potatoes,86,1.57,20.1,0.05,3,0.46,28,0.33,1.5,Staples,Carbohydrate staple
+Apples,48,0.27,12.8,0.13,1.3,0.43,180,0.63,2.3,Fruits,Snack / Side
+Bananas,89,1.09,22.8,0.33,2.6,0.86,115,1.93,1.2,Fruits,Snack / Side
+Oranges,52,0.91,11.8,0.15,2,0.39,83,0.86,2.1,Fruits,Snack / Side
+Carrots,44,0.87,9.68,0.24,2.9,0.43,28,0.33,1,Vegetables,Side
+Broccoli,39,2.57,6.27,0.34,2.4,0.43,103,0.38,1.8,Vegetables,Side
+Spinach,27,2.85,2.41,0.62,1.6,0.43,119,0.55,2,Vegetables,Side
+Frozen peas,77,5.22,13.6,0.4,4.5,0.65,397,7.46,2.2,Vegetables,Side
+Tinned tomatoes,24,1.2,5.31,0.3,1.5,2.09,370,0.8,2.5,Vegetables,Side / Base
+Lentils,352,24.6,63.4,1.06,10.7,1.79,436,15.57,2.5,Protein,Side / Main
+Chickpeas,378,20.5,63,6.04,12.2,1.79,436,15.57,2,Protein,Side / Main
+Black beans,341,21.6,62.4,1.42,15.5,1.79,436,15.57,2,Protein,Side / Main
+Peanut butter,598,22.2,22.3,51.4,5,3.23,1852,9.11,6.5,Protein,Snack / Spread
+Lamb,237,17.5,0,18.6,0,39.72,1803,369.81,12.5,Protein,Main protein
+Prawns,71,15.6,0.48,0.8,0,26.87,3515,2.97,14,Protein,Main protein/seafood
+Tofu,76,8.08,1.87,4.78,0.3,3.16,149,3.52,4.5,Protein,Main protein/Vegetarian
+Soy milk,101,4.22,17.3,1.69,1.3,0.98,28,0.66,2,Dairy alternative,Milk Substitute
+Maize (corn),86,3.27,18.7,1.35,2,1.7,216,2.94,1.8,Staples,Carbohydrate staple
+Barley,354,12.5,73.3,2.3,17.3,1.25,17,1.11,2.2,Staples,Carbohydrate staple
+Berries & grapes,83,0.9,19.4,0.2,19.4,1.53,420,2.41,4.5,fruits,Snack/Fruit
+Onions & leeks,40,1.1,9.34,0.1,1.7,0.5,14,0.39,1.2,Vegetables,Vegetable side
+Nuts,579,21.2,21.6,49.9,12.5,0.43,4134,12.96,9.5,Protein,Snack/Protein
+Dark chocolate,598,7.79,45.9,42.6,10.9,46.65,541,68.96,10,,Snack/Dessert

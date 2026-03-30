@@ -1,4 +1,9 @@
-enum DietType { omnivore, vegetarian, vegan }
+enum DietType {
+  omnivore,
+  pescatarian,
+  vegetarian,
+  vegan,
+}
 
 enum BudgetPreference { low, medium, high }
 
@@ -30,6 +35,8 @@ class UserPreferences {
     switch (dietType) {
       case DietType.omnivore:
         return 'Omnivore';
+      case DietType.pescatarian:
+        return 'Pescatarian';
       case DietType.vegetarian:
         return 'Vegetarian';
       case DietType.vegan:

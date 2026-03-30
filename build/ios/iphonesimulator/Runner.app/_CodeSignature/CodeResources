@@ -18,7 +18,7 @@
 		</data>
 		<key>Assets.car</key>
 		<data>
-		+rHX21EZrXofFEEusPU5hLZ7TYI=
+		6KaLlFoJkv62wMjBrqXI84CtyA4=
 		</data>
 		<key>Base.lproj/LaunchScreen.storyboardc/01J-lp-oVM-view-Ze5-6b-2t3.nib</key>
 		<data>
@@ -46,7 +46,7 @@
 		</data>
 		<key>Frameworks/App.framework/App</key>
 		<data>
-		2KMtNuX/hd2hoX7M4xXKF4mqxt4=
+		/bAW9mwvl78/zLPmzfaXaaunG4k=
 		</data>
 		<key>Frameworks/App.framework/Info.plist</key>
 		<data>
@@ -54,11 +54,11 @@
 		</data>
 		<key>Frameworks/App.framework/_CodeSignature/CodeResources</key>
 		<data>
-		bfNGJ3n1/iYaNIKU64VtSB7Id+Y=
+		lMT214HRy02UXlM7d4nkdX9DxLo=
 		</data>
 		<key>Frameworks/App.framework/flutter_assets/AssetManifest.bin</key>
 		<data>
-		ME0cAg6cl/bTZmwXEVgMugDccUI=
+		lujTNuA/XgruqfqWDLZm8t4jc2k=
 		</data>
 		<key>Frameworks/App.framework/flutter_assets/FontManifest.json</key>
 		<data>
@@ -72,17 +72,21 @@
 		<data>
 		BASHf/14q0VcgmnKtkQLt+qMEqo=
 		</data>
+		<key>Frameworks/App.framework/flutter_assets/assets/data/food_knowledge_dataset.csv</key>
+		<data>
+		4j/u/o6kSD5z2hllcfMTrrLN0P8=
+		</data>
 		<key>Frameworks/App.framework/flutter_assets/fonts/MaterialIcons-Regular.otf</key>
 		<data>
 		/CUoTuPQqqdexfyOT9lpJhV+2MQ=
 		</data>
 		<key>Frameworks/App.framework/flutter_assets/isolate_snapshot_data</key>
 		<data>
-		upl8jLkqsQWlwubW5LMiIuC7I24=
+		LmqVg8AByweadgRkTIva1b3CsBA=
 		</data>
 		<key>Frameworks/App.framework/flutter_assets/kernel_blob.bin</key>
 		<data>
-		e0bGdK39CZpNiWt1XQttTFclPqc=
+		89X7x45hA3HZxv91suJIBIcLzyg=
 		</data>
 		<key>Frameworks/App.framework/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf</key>
 		<data>
@@ -102,7 +106,7 @@
 		</data>
 		<key>Frameworks/Flutter.framework/Flutter</key>
 		<data>
-		yU46tWeAvorO/8PB1kvvu5p4kso=
+		3s4/ScpRkQipCivrlvEmNToeJjg=
 		</data>
 		<key>Frameworks/Flutter.framework/Headers/Flutter.h</key>
 		<data>
@@ -182,7 +186,7 @@
 		</data>
 		<key>Frameworks/Flutter.framework/Info.plist</key>
 		<data>
-		soehJBObzoA78IhMvJx4c52FmO8=
+		MAadKxf5GXoBi3LjEtv7aczxwHo=
 		</data>
 		<key>Frameworks/Flutter.framework/Modules/module.modulemap</key>
 		<data>
@@ -194,7 +198,7 @@
 		</data>
 		<key>Frameworks/Flutter.framework/_CodeSignature/CodeResources</key>
 		<data>
-		TMFuKq2fbux6lZSlW0DP2Jt9Sfw=
+		b+DJ05+yKatS4rPNUdTXzwjJKkc=
 		</data>
 		<key>Frameworks/Flutter.framework/icudtl.dat</key>
 		<data>
@@ -210,11 +214,11 @@
 		</data>
 		<key>Frameworks/objective_c.framework/objective_c</key>
 		<data>
-		6OeD9hs3kLKVUzw6lViIKpWDWhM=
+		ICZ8nTfxX79+AbPDIFuaOPBzCiI=
 		</data>
 		<key>Info.plist</key>
 		<data>
-		r/Gfcd8TcYSkV8XCx0hWvTE6054=
+		xUKmxOmsYd0nNPtPG3qN64q7t8s=
 		</data>
 		<key>PkgInfo</key>
 		<data>
@@ -222,11 +226,11 @@
 		</data>
 		<key>Runner.debug.dylib</key>
 		<data>
-		E6xIfcdjXZ3bKgToawhSDRofjoY=
+		K64KFj61nCWfBfXUgKqQ9Get3rg=
 		</data>
 		<key>__preview.dylib</key>
 		<data>
-		21LN5P4fFfujUBNqgoRrB4EiKMI=
+		n+DC5xIyLvY/gdxEGdPqwgjBkAg=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -256,7 +260,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			o5QDvPp9dK7h7W1hmBNPcZXK069sxmcyXXYN+dCXwtY=
+			XE9mqU189busGRjfryztiId7rUa7uAsB4M0QPiJpPKk=
 			</data>
 		</dict>
 		<key>Base.lproj/LaunchScreen.storyboardc/01J-lp-oVM-view-Ze5-6b-2t3.nib</key>
@@ -305,7 +309,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			ecI9J1flTs5ovrSrlE97cwuLiyYlczNdyl3Dwz2Zx5Y=
+			4Pqp7oiJ2T5mqa/fraKGrgm02n2fosgsEj6OhTdlpeM=
 			</data>
 		</dict>
 		<key>Frameworks/App.framework/Info.plist</key>
@@ -319,14 +323,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			owT2/PWXuIl2ocbihjJhr8fn4kRuilR89wn0WnsyNYI=
+			E8CzhSqwoEfUu4JhGXJsnOMVP/ulF3lX1BjDO5oo+vY=
 			</data>
 		</dict>
 		<key>Frameworks/App.framework/flutter_assets/AssetManifest.bin</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			AK9VrT1vIYmP534P8JLRoc2lLJQbaGDpko1FyK+MCV0=
+			CK/1mQZ+joeFZ9DKzFiL/uHyFq8lcki+EzqcM+DFvxs=
 			</data>
 		</dict>
 		<key>Frameworks/App.framework/flutter_assets/FontManifest.json</key>
@@ -350,6 +354,13 @@
 			Ylst3tzkLj0hjOuIabyRGejeqGUKbLJKt3nVAIBVsUE=
 			</data>
 		</dict>
+		<key>Frameworks/App.framework/flutter_assets/assets/data/food_knowledge_dataset.csv</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			UaXargTo792vgJOCusCMQDDczYI6Qbt1sAmbupogNFU=
+			</data>
+		</dict>
 		<key>Frameworks/App.framework/flutter_assets/fonts/MaterialIcons-Regular.otf</key>
 		<dict>
 			<key>hash2</key>
@@ -361,14 +372,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			b9/Pp9zZW839MyfblIgzqSf7GMkc0o6oj2ZIrvTxzNs=
+			0OiDpTMZX/lI0X53XVn1cNc/lt6vH0VU4cEHviGn2PM=
 			</data>
 		</dict>
 		<key>Frameworks/App.framework/flutter_assets/kernel_blob.bin</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			51e18Lf9ECV3jRzNGCP+FcbXybCCDEg7hwe0XPkkLiA=
+			/pQ+t7mnAy7ZjnjP89m57x01xXoypz5xX/DCDl2CTF8=
 			</data>
 		</dict>
 		<key>Frameworks/App.framework/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf</key>
@@ -403,7 +414,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			Fnd82DzhtN2hH/WwIVSh6C67wmgN8wChAt5466BnIwE=
+			HVSNpirr4hAPkrbuMEMEUcI2OhvY8+X98zPQLF+lvAI=
 			</data>
 		</dict>
 		<key>Frameworks/Flutter.framework/Headers/Flutter.h</key>
@@ -543,7 +554,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			A+aadkxQIlpWDRB9XeJJcpvfMMlpSHjoTa00i9y6fTo=
+			TrMe2NOR+jWGL76e2gAhg7vNkGFo21eT4l/Yx9QT5KY=
 			</data>
 		</dict>
 		<key>Frameworks/Flutter.framework/Modules/module.modulemap</key>
@@ -564,7 +575,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			A78DzTf1Kh1uBVgf7x/iVs60rHOfhhkuiCb7CT2WDrI=
+			Z4vC8Q6NUSLuMbEQepLT2q80FddoxXiyX4qh1NOkDLw=
 			</data>
 		</dict>
 		<key>Frameworks/Flutter.framework/icudtl.dat</key>
@@ -592,21 +603,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			AjGYN8N9EAIqPfSpgf8XKmICdd+UgXSj0AtQHejdjJw=
+			oFYzIdgpJEWxIl0eA5B8bCdX1hcupipMIn5iH8BuwQE=
 			</data>
 		</dict>
 		<key>Runner.debug.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			QayBypkW/JyLDtINfZtLivb2e5YkWlGH6XkROxkjyMs=
+			Ee/yxZNkCDmzZhby156aAzH3OmqMfihHYIxCbptOAjE=
 			</data>
 		</dict>
 		<key>__preview.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			YRltEcK0l8Xx6z0UKZ9ofPxo0sZ05C4VO+r72Fq4wv0=
+			QQpa6o5vHM2uT5Yd8wf8BPoJ/Playt1fJ3wOc6R7Pkc=
 			</data>
 		</dict>
 	</dict>

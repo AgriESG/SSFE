@@ -180,7 +180,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 20),
-          // const Text('🥗', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 16),
           const Text(
             'What\'s your\ndiet type?',
@@ -193,7 +192,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           const SizedBox(height: 8),
           const Text(
-            'This helps us tailor your food suggestions and ensure all recommendations fit your lifestyle.',
+            'This helps us optimise your food plan for cost, nutrition, and environmental impact.',
             style: TextStyle(
               fontSize: 15,
               color: AppColors.textSecondary,
@@ -214,6 +213,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         'emoji': '🍖',
         'title': 'Omnivore',
         'desc': 'I eat everything — meat, fish, dairy, and plants',
+      },
+      DietType.pescatarian: {
+        'emoji': '🐟',
+        'title': 'Pescatarian',
+        'desc': 'I eat fish, dairy, eggs, and plants, but no meat',
       },
       DietType.vegetarian: {
         'emoji': '🥚',
@@ -246,7 +250,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         ),
         child: Row(
           children: [
-            // Text(info['emoji']!, style: const TextStyle(fontSize: 32)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -416,7 +419,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 20),
-          // const Text('🎯', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 16),
           const Text(
             'Set your\npriorities',
@@ -455,14 +457,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ['Low', 'Medium', 'High'],
           ),
           const SizedBox(height: 20),
-          // const Text(
-          //   '🥗  Nutrition Goal',
-          //   style: TextStyle(
-          //     fontSize: 16,
-          //     fontWeight: FontWeight.w600,
-          //     color: AppColors.textPrimary,
-          //   ),
-          // ),
           const SizedBox(height: 12),
           ...NutritionGoal.values.map((goal) {
             final isSelected = _preferences.nutritionGoal == goal;
@@ -534,14 +528,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Text(
-        //   '$emoji  $title',
-        //   style: const TextStyle(
-        //     fontSize: 16,
-        //     fontWeight: FontWeight.w600,
-        //     color: AppColors.textPrimary,
-        //   ),
-        // ),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
@@ -604,7 +590,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 20),
-          // const Text('👨‍👩‍👧‍👦', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 16),
           const Text(
             'Household\nsize',
@@ -662,8 +647,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     _buildStepperButton(
                       icon: HugeIcons.strokeRoundedRemove01,
                       onTap: () {
-                        if (_preferences.householdSize > 1)
+                        if (_preferences.householdSize > 1) {
                           setState(() => _preferences.householdSize--);
+                        }
                       },
                       enabled: _preferences.householdSize > 1,
                     ),
@@ -671,8 +657,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     _buildStepperButton(
                       icon: HugeIcons.strokeRoundedAdd01,
                       onTap: () {
-                        if (_preferences.householdSize < 10)
+                        if (_preferences.householdSize < 10) {
                           setState(() => _preferences.householdSize++);
+                        }
                       },
                       enabled: _preferences.householdSize < 10,
                     ),
