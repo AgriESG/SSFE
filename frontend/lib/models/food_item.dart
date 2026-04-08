@@ -4,19 +4,19 @@ class FoodItem {
   final String category;
   final String role;
   final String emoji;
-  final double carbonPerKg; // kg CO2e per kg
-  final double waterPerKg; // litres per kg
-  final double landPerKg; // m² per kg
-  final double pricePerKg; // £ per kg
-  final double proteinPerKg; // g per kg
-  final double caloriesPerKg; // kcal per kg
-  final double carbsPerKg; // g per kg
-  final double fatPerKg; // g per kg
-  final double fibrePerKg; // g per kg
+  final double carbonPerKg;
+  final double waterPerKg;
+  final double landPerKg;
+  final double pricePerKg;
+  final double proteinPerKg;
+  final double caloriesPerKg;
+  final double carbsPerKg;
+  final double fatPerKg;
+  final double fibrePerKg;
   final bool isSeasonal;
   final bool isLocal;
   final String? seasonalNote;
-  double quantity; // kg
+  double quantity;
 
   FoodItem({
     required this.id,
@@ -38,6 +38,10 @@ class FoodItem {
     this.seasonalNote,
     this.quantity = 1.0,
   });
+
+  // ---------------------------------------------------------------------------
+  // Computed totals
+  // ---------------------------------------------------------------------------
 
   double get totalCarbon => carbonPerKg * quantity;
   double get totalWater => waterPerKg * quantity;
@@ -72,18 +76,78 @@ class FoodItem {
     );
   }
 
-  /// Create a FoodItem from a CSV row map
+  // ---------------------------------------------------------------------------
+  // API factories — used when data comes from FastAPI backend
+  // ---------------------------------------------------------------------------
+
+  /// From /foods list endpoint: {food_id, food_name, category, role}
+  /// Minimal data — no env/price/nutrition detail at list level.
+  factory FoodItem.fromApiJson(Map<String, dynamic> j) {
+    final name = (j['food_name'] ?? '') as String;
+    final category = _normaliseCategory((j['category'] ?? '') as String);
+    final role = (j['role'] ?? '') as String;
+    return FoodItem(
+      id: (j['food_id'] ?? '') as String,
+      name: name,
+      category: category,
+      role: role,
+      emoji: _emojiForCategory(category, name),
+      carbonPerKg: 0,
+      waterPerKg: 0,
+      landPerKg: 0,
+      pricePerKg: 0,
+      proteinPerKg: 0,
+      caloriesPerKg: 0,
+      carbsPerKg: 0,
+      fatPerKg: 0,
+      fibrePerKg: 0,
+    );
+  }
+
+  /// From /foods/{id} detail endpoint — full nutrition, env, price data.
+  factory FoodItem.fromApiDetailJson(Map<String, dynamic> j) {
+    final name = (j['food_name'] ?? '') as String;
+    final category = _normaliseCategory(
+      (j['category'] ?? j['role'] ?? '') as String,
+    );
+    final role = (j['role'] ?? '') as String;
+    final nutrition = j['nutrition'] as Map<String, dynamic>? ?? {};
+    final environmental = j['environmental'] as Map<String, dynamic>? ?? {};
+
+    return FoodItem(
+      id: (j['food_id'] ?? '') as String,
+      name: name,
+      category: category,
+      role: role,
+      emoji: _emojiForCategory(category, name),
+      carbonPerKg: _d(environmental['carbon_kg_co2e']),
+      waterPerKg: _d(environmental['water_litres']),
+      landPerKg: _d(environmental['land_m2']),
+      pricePerKg: _d(j['price_per_kg_gbp']),
+      proteinPerKg: _d(nutrition['protein_g']),
+      caloriesPerKg: _d(nutrition['calories']),
+      carbsPerKg: 0, // not returned at detail level — extend API if needed
+      fatPerKg: 0,
+      fibrePerKg: _d(nutrition['fibre_g']),
+      seasonalNote: j['seasonal_note'] as String?,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CSV factory — kept for any offline/fallback use
+  // ---------------------------------------------------------------------------
+
   factory FoodItem.fromCsvRow(Map<String, String> row) {
     final name = row['Food_name'] ?? '';
-    final category = (row['Category'] ?? '').trim();
+    final category = _normaliseCategory((row['Category'] ?? '').trim());
     final role = (row['Role'] ?? '').trim();
 
     return FoodItem(
       id: _generateId(name),
       name: name,
-      category: _normaliseCategory(category),
+      category: category,
       role: role,
-      emoji: _emojiForCategory(_normaliseCategory(category), name),
+      emoji: _emojiForCategory(category, name),
       carbonPerKg: _parseDouble(row['Carbon (kg CO2e/kg)']),
       waterPerKg: _parseDouble(row['Water (L/kg)']),
       landPerKg: _parseDouble(row['Land (m2/kg)']),
@@ -95,6 +159,12 @@ class FoodItem {
       fibrePerKg: _parseDouble(row['Fibre (g)']),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  static double _d(dynamic v) => v == null ? 0.0 : (v as num).toDouble();
 
   static double _parseDouble(String? value) {
     if (value == null || value.trim().isEmpty) return 0.0;
@@ -114,16 +184,20 @@ class FoodItem {
       case 'protein':
         return 'Protein';
       case 'dairy':
-        return 'Dairy';
+      case 'dairy_alt':
       case 'dairy alternative':
         return 'Dairy';
       case 'staples':
+      case 'carb':
         return 'Staples';
       case 'vegetables':
+      case 'vegetable':
         return 'Vegetables';
       case 'fruits':
       case 'fruit':
         return 'Fruits';
+      case 'snack':
+        return 'Snacks';
       default:
         if (lower.isEmpty) return 'Other';
         return raw[0].toUpperCase() + raw.substring(1).toLowerCase();
@@ -132,8 +206,6 @@ class FoodItem {
 
   static String _emojiForCategory(String category, String name) {
     final lower = name.toLowerCase();
-
-    // Specific name-based emojis
     if (lower.contains('chicken')) return '🍗';
     if (lower.contains('pork')) return '🥓';
     if (lower.contains('beef')) return '🥩';
@@ -164,21 +236,14 @@ class FoodItem {
     if (lower.contains('chocolate')) return '🍫';
     if (lower.contains('corn') || lower.contains('maize')) return '🌽';
     if (lower.contains('barley')) return '🌾';
-
-    // Category-based fallback
     switch (category) {
-      case 'Protein':
-        return '🥩';
-      case 'Dairy':
-        return '🥛';
-      case 'Staples':
-        return '🌾';
-      case 'Vegetables':
-        return '🥬';
-      case 'Fruits':
-        return '🍎';
-      default:
-        return '🍽️';
+      case 'Protein': return '🥩';
+      case 'Dairy': return '🥛';
+      case 'Staples': return '🌾';
+      case 'Vegetables': return '🥬';
+      case 'Fruits': return '🍎';
+      case 'Snacks': return '🥜';
+      default: return '🍽️';
     }
   }
 }

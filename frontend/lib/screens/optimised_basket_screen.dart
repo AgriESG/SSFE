@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/food_item.dart';
-import '../models/basket_impact.dart';
 import '../models/user_preferences.dart';
-import '../services/optimisation_engine.dart';
+import '../services/api_service.dart';
 import '../widgets/adaptive_widgets.dart';
 import 'savings_impact_screen.dart';
 
@@ -24,8 +23,10 @@ class OptimisedBasketScreen extends StatefulWidget {
 
 class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
     with TickerProviderStateMixin {
-  late OptimisationResult _result;
+  ApiOptimisationResult? _result;
   bool _isOptimising = true;
+  String? _errorMessage;
+
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
@@ -40,59 +41,55 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
       parent: _animController,
       curve: Curves.easeOutCubic,
     );
+    _runOptimisation();
+  }
 
-    // Initialise with empty result
-    _result = OptimisationResult(
-      optimisedBasket: [],
-      substitutions: [],
-      comparison: ImpactComparison(
-        original: const BasketImpact(
-          totalCarbon: 0,
-          totalWater: 0,
-          totalLand: 0,
-          totalCost: 0,
-          totalProtein: 0,
-          totalCalories: 0,
-          totalFibre: 0,
-        ),
-        optimised: const BasketImpact(
-          totalCarbon: 0,
-          totalWater: 0,
-          totalLand: 0,
-          totalCost: 0,
-          totalProtein: 0,
-          totalCalories: 0,
-          totalFibre: 0,
-        ),
-      ),
-      insights: [],
-    );
-
-    // Simulate optimisation
-    Future.delayed(const Duration(milliseconds: 1800), () {
+  Future<void> _runOptimisation() async {
+    try {
+      final result = await ApiService.optimiseBasket(
+        widget.originalBasket,
+        widget.preferences,
+      );
       if (mounted) {
         setState(() {
-          _result = OptimisationEngine.optimise(
-            widget.originalBasket,
-            widget.preferences,
-          );
+          _result = result;
           _isOptimising = false;
         });
         _animController.forward();
       }
-    });
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.message;
+          _isOptimising = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not reach the optimisation server. '
+              'Check your connection and try again.';
+          _isOptimising = false;
+        });
+      }
+    }
+  }
+
+  void _navigateToSavings() {
+    if (_result == null) return;
+    // Convert ApiOptimisationResult → SavingsImpactScreen
+    // Pass the raw result — update SavingsImpactScreen to accept ApiOptimisationResult
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SavingsImpactScreen(result: _result!),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _animController.dispose();
     super.dispose();
-  }
-
-  void _navigateToSavings() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SavingsImpactScreen(result: _result)),
-    );
   }
 
   @override
@@ -109,9 +106,17 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _isOptimising ? _buildOptimising() : _buildResult(),
+      body: _isOptimising
+          ? _buildOptimising()
+          : _errorMessage != null
+              ? _buildError()
+              : _buildResult(),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Loading state — unchanged from original
+  // ---------------------------------------------------------------------------
 
   Widget _buildOptimising() {
     return Center(
@@ -155,7 +160,65 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Error state — new
+  // ---------------------------------------------------------------------------
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedAlert02,
+              color: AppColors.error,
+              size: 48,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Optimisation Failed',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? 'Unknown error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 28),
+            AdaptiveButton(
+              label: 'Try Again',
+              onPressed: () {
+                setState(() {
+                  _isOptimising = true;
+                  _errorMessage = null;
+                });
+                _runOptimisation();
+              },
+              isFullWidth: true,
+              hugeIcon: HugeIcons.strokeRoundedRefresh,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Results state — same UI, now using ApiOptimisationResult
+  // ---------------------------------------------------------------------------
+
   Widget _buildResult() {
+    final result = _result!;
     return FadeTransition(
       opacity: _fadeAnim,
       child: SingleChildScrollView(
@@ -163,37 +226,52 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildComparisonBanner(),
+            _buildComparisonBanner(result),
             const SizedBox(height: 24),
-            if (_result.substitutions.isNotEmpty) ...[
+            if (result.substitutions.isNotEmpty) ...[
               SectionHeader(
                 title: 'Suggested Swaps',
-                subtitle: '${_result.substitutions.length} improvements found',
+                subtitle: '${result.substitutions.length} improvements found',
               ),
-              ..._result.substitutions.map(
+              ...result.substitutions.map(
                 (s) => SubstitutionCard(
-                  originalName: s.original.name,
-                  originalEmoji: s.original.emoji,
-                  replacementName: s.replacement.name,
-                  replacementEmoji: s.replacement.emoji,
-                  reason: s.reason,
-                  carbonSaved: s.carbonSaved,
-                  costSaved: s.costSaved,
+                  originalName: s.originalName,
+                  originalEmoji: _emojiFor(s.originalName),
+                  replacementName: s.substituteName,
+                  replacementEmoji: _emojiFor(s.substituteName),
+                  reason: s.rationale,
+                  carbonSaved: s.envDelta,
+                  costSaved: s.costDelta,
                 ),
               ),
               const SizedBox(height: 20),
             ],
-            const SectionHeader(
+            SectionHeader(
               title: 'Your Optimised Basket',
-              subtitle: 'Tap items for more details',
+              subtitle: '${result.optimisedBasket.length} items',
             ),
-            ..._result.optimisedBasket.asMap().entries.map((entry) {
+            ...result.optimisedBasket.asMap().entries.map((entry) {
               final item = entry.value;
-              final wasSubstituted = _result.substitutions.any(
-                (s) => s.replacement.id == item.id,
-              );
+              final wasSubstituted = result.substitutions
+                  .any((s) => s.substituteId == item.id);
               return _buildOptimisedItemTile(item, wasSubstituted);
             }),
+            if (result.insights.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              SectionHeader(title: 'Insights', subtitle: ''),
+              ...result.insights.map(
+                (insight) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    insight,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             AdaptiveButton(
               label: 'View Full Savings Report',
@@ -208,8 +286,8 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
     );
   }
 
-  Widget _buildComparisonBanner() {
-    final comp = _result.comparison;
+  Widget _buildComparisonBanner(ApiOptimisationResult result) {
+    final comp = result.comparison;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -248,19 +326,19 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
           Row(
             children: [
               _bannerStat(
-                '${comp.carbonChange.abs().toStringAsFixed(0)}%',
+                '${comp.envReduction.toStringAsFixed(0)}pts',
                 'Less CO₂',
                 HugeIcons.strokeRoundedAnalyticsDown,
               ),
               const SizedBox(width: 12),
               _bannerStat(
-                '£${comp.costSaved.abs().toStringAsFixed(0)}',
-                'Saved',
+                '${comp.costReduction.toStringAsFixed(0)}pts',
+                'Cost saved',
                 HugeIcons.strokeRoundedPiggyBank,
               ),
               const SizedBox(width: 12),
               _bannerStat(
-                '${_result.substitutions.length}',
+                '${result.substitutions.length}',
                 'Swaps',
                 HugeIcons.strokeRoundedExchange01,
               ),
@@ -281,11 +359,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
         ),
         child: Column(
           children: [
-            HugeIcon(
-              icon: icon,
-              color: Colors.white.withValues(alpha: 0.8),
-              size: 18,
-            ),
+            HugeIcon(icon: icon, color: Colors.white.withValues(alpha: 0.8), size: 18),
             const SizedBox(height: 6),
             Text(
               value,
@@ -367,7 +441,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${item.quantity}kg · £${item.totalPrice.toStringAsFixed(2)} · ${item.totalCarbon.toStringAsFixed(1)} kg CO₂',
+                  '${item.quantity}kg · £${item.totalPrice.toStringAsFixed(2)} · ${item.totalCarbon.toStringAsFixed(2)} kg CO₂',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
@@ -381,7 +455,8 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
                         _tagChip('🌿 Seasonal', AppColors.success),
                       if (item.isSeasonal && item.isLocal)
                         const SizedBox(width: 6),
-                      if (item.isLocal) _tagChip('📍 Local', AppColors.info),
+                      if (item.isLocal)
+                        _tagChip('📍 Local', AppColors.info),
                     ],
                   ),
                 ],
@@ -410,9 +485,33 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
       ),
     );
   }
+
+  String _emojiFor(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('chicken')) return '🍗';
+    if (lower.contains('beef')) return '🥩';
+    if (lower.contains('salmon') || lower.contains('tuna')) return '🐟';
+    if (lower.contains('milk')) return '🥛';
+    if (lower.contains('yoghurt') || lower.contains('yogurt')) return '🥄';
+    if (lower.contains('egg')) return '🥚';
+    if (lower.contains('lentil') || lower.contains('bean') || lower.contains('chickpea')) return '🫘';
+    if (lower.contains('tofu')) return '🫘';
+    if (lower.contains('bread')) return '🍞';
+    if (lower.contains('rice')) return '🍚';
+    if (lower.contains('oat')) return '🥣';
+    if (lower.contains('apple')) return '🍎';
+    if (lower.contains('banana')) return '🍌';
+    if (lower.contains('broccoli')) return '🥦';
+    if (lower.contains('carrot')) return '🥕';
+    if (lower.contains('spinach')) return '🥬';
+    return '🍽️';
+  }
 }
 
-/// Animated icon for optimisation loading state
+// ---------------------------------------------------------------------------
+// Animated icon — unchanged
+// ---------------------------------------------------------------------------
+
 class _AnimatedOptimiseIcon extends StatefulWidget {
   @override
   State<_AnimatedOptimiseIcon> createState() => _AnimatedOptimiseIconState();

@@ -3,7 +3,7 @@ import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/food_item.dart';
 import '../models/user_preferences.dart';
-import '../services/food_database.dart';
+import '../services/api_service.dart';
 import '../widgets/adaptive_widgets.dart';
 import 'impact_dashboard_screen.dart';
 
@@ -19,6 +19,14 @@ class BasketInputScreen extends StatefulWidget {
 class _BasketInputScreenState extends State<BasketInputScreen>
     with SingleTickerProviderStateMixin {
   final List<FoodItem> _basket = [];
+
+  // Food catalogue state
+  List<FoodItem> _allFoods = [];
+  List<FoodItem> _filteredFoods = [];
+  List<String> _categories = ['All'];
+  bool _isLoading = true;
+  String? _loadError;
+
   String _searchQuery = '';
   String _selectedCategory = 'All';
   final TextEditingController _searchController = TextEditingController();
@@ -28,8 +36,6 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
-  List<String> get categories => ['All', ...FoodDatabase.categories];
-
   @override
   void initState() {
     super.initState();
@@ -37,8 +43,11 @@ class _BasketInputScreenState extends State<BasketInputScreen>
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
-    _animController.forward();
+    _fadeAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOut,
+    );
+    _loadFoods();
   }
 
   @override
@@ -49,28 +58,59 @@ class _BasketInputScreenState extends State<BasketInputScreen>
     super.dispose();
   }
 
-  List<FoodItem> get _filteredItems {
+  // ---------------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------------
+
+  Future<void> _loadFoods() async {
+    try {
+      final foods = await ApiService.getAllFoods();
+      final cats = ['All', ...{...foods.map((f) => f.category)}.toList()..sort()];
+      if (mounted) {
+        setState(() {
+          _allFoods = foods;
+          _filteredFoods = foods;
+          _categories = cats;
+          _isLoading = false;
+        });
+        _animController.forward();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadError = 'Could not load food catalogue. Is the backend running?';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filtering
+  // ---------------------------------------------------------------------------
+
+  void _applyFilter() {
     var items = _selectedCategory == 'All'
-        ? FoodDatabase.allFoods
-        : FoodDatabase.byCategory(_selectedCategory);
+        ? _allFoods
+        : _allFoods.where((f) => f.category == _selectedCategory).toList();
+
     if (_searchQuery.isNotEmpty) {
       items = items
-          .where(
-            (item) =>
-                item.name.toLowerCase().contains(_searchQuery.toLowerCase()),
-          )
+          .where((f) => f.name.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
     }
-    return items;
+    setState(() => _filteredFoods = items);
   }
+
+  // ---------------------------------------------------------------------------
+  // Basket operations
+  // ---------------------------------------------------------------------------
 
   void _addToBasket(FoodItem item) {
     setState(() {
       final idx = _basket.indexWhere((i) => i.id == item.id);
       if (idx >= 0) {
-        _basket[idx] = _basket[idx].copyWith(
-          quantity: _basket[idx].quantity + 1,
-        );
+        _basket[idx] = _basket[idx].copyWith(quantity: _basket[idx].quantity + 1);
       } else {
         _basket.add(item.copyWith(quantity: 1));
       }
@@ -92,25 +132,35 @@ class _BasketInputScreenState extends State<BasketInputScreen>
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Paste mode — searches against loaded catalogue
+  // ---------------------------------------------------------------------------
+
   void _parsePastedList() {
     final text = _pasteController.text.trim();
     if (text.isEmpty) return;
+
     final lines = text
         .split('\n')
-        .map((l) => l.trim())
+        .map((l) => l.trim().replaceAll(RegExp(r'^[\-•\*]\s*'), ''))
         .where((l) => l.isNotEmpty);
+
     int added = 0;
     for (final line in lines) {
-      final cleanLine = line.replaceAll(RegExp(r'^[\-•\*]\s*'), '');
-      final results = FoodDatabase.search(cleanLine);
-      if (results.isNotEmpty) {
-        _addToBasket(results.first);
+      final lower = line.toLowerCase();
+      final match = _allFoods.where(
+        (f) => f.name.toLowerCase().contains(lower),
+      ).toList();
+      if (match.isNotEmpty) {
+        _addToBasket(match.first);
         added++;
       }
     }
+
     setState(() => _showPasteMode = false);
     _pasteController.clear();
-    if (added > 0) {
+
+    if (added > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Added $added items to your basket'),
@@ -119,6 +169,10 @@ class _BasketInputScreenState extends State<BasketInputScreen>
       );
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
 
   void _navigateToImpact() {
     if (_basket.isEmpty) return;
@@ -131,6 +185,10 @@ class _BasketInputScreenState extends State<BasketInputScreen>
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -158,14 +216,73 @@ class _BasketInputScreenState extends State<BasketInputScreen>
           ),
         ],
       ),
-      body: FadeTransition(
-        opacity: _fadeAnim,
+      body: _isLoading
+          ? _buildLoading()
+          : _loadError != null
+              ? _buildError()
+              : FadeTransition(
+                  opacity: _fadeAnim,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _showPasteMode
+                            ? _buildPasteMode()
+                            : _buildSearchMode(),
+                      ),
+                      _buildBasketSummary(),
+                    ],
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildLoading() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text(
+            'Loading food catalogue...',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Expanded(
-              child: _showPasteMode ? _buildPasteMode() : _buildSearchMode(),
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedAlert02,
+              color: AppColors.error,
+              size: 48,
             ),
-            _buildBasketSummary(),
+            const SizedBox(height: 16),
+            Text(
+              _loadError ?? 'Unknown error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 24),
+            AdaptiveButton(
+              label: 'Retry',
+              onPressed: () {
+                setState(() {
+                  _isLoading = true;
+                  _loadError = null;
+                });
+                _loadFoods();
+              },
+              isFullWidth: false,
+              hugeIcon: HugeIcons.strokeRoundedRefresh,
+            ),
           ],
         ),
       ),
@@ -175,12 +292,14 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   Widget _buildSearchMode() {
     return Column(
       children: [
-        // Search bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: TextField(
             controller: _searchController,
-            onChanged: (q) => setState(() => _searchQuery = q),
+            onChanged: (q) {
+              _searchQuery = q;
+              _applyFilter();
+            },
             decoration: InputDecoration(
               hintText: 'Search for food items...',
               prefixIcon: Padding(
@@ -195,7 +314,8 @@ class _BasketInputScreenState extends State<BasketInputScreen>
                   ? IconButton(
                       onPressed: () {
                         _searchController.clear();
-                        setState(() => _searchQuery = '');
+                        _searchQuery = '';
+                        _applyFilter();
                       },
                       icon: HugeIcon(
                         icon: HugeIcons.strokeRoundedCancel01,
@@ -219,23 +339,27 @@ class _BasketInputScreenState extends State<BasketInputScreen>
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: categories.length,
+            itemCount: _categories.length,
             itemBuilder: (_, i) {
-              final cat = categories[i];
+              final cat = _categories[i];
               final isSelected = _selectedCategory == cat;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text(cat),
                   selected: isSelected,
-                  onSelected: (_) => setState(() => _selectedCategory = cat),
+                  onSelected: (_) {
+                    _selectedCategory = cat;
+                    _applyFilter();
+                  },
                   selectedColor: AppColors.primary.withValues(alpha: 0.15),
                   labelStyle: TextStyle(
                     fontSize: 13,
                     color: isSelected
                         ? AppColors.primary
                         : AppColors.textSecondary,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
               );
@@ -243,13 +367,12 @@ class _BasketInputScreenState extends State<BasketInputScreen>
           ),
         ),
         const SizedBox(height: 8),
-        // Item list
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _filteredItems.length,
+            itemCount: _filteredFoods.length,
             itemBuilder: (_, i) {
-              final item = _filteredItems[i];
+              final item = _filteredFoods[i];
               final inBasket = _basket.any((b) => b.id == item.id);
               return _buildFoodItemTile(item, inBasket);
             },
@@ -317,13 +440,14 @@ class _BasketInputScreenState extends State<BasketInputScreen>
       ),
       child: ListTile(
         dense: true,
-        // leading: Text(item.emoji, style: const TextStyle(fontSize: 26)),
         title: Text(
           item.name,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
-          '£${item.pricePerKg.toStringAsFixed(2)}/kg · ${item.carbonPerKg.toStringAsFixed(1)} kg CO₂/kg',
+          item.pricePerKg > 0
+              ? '£${item.pricePerKg.toStringAsFixed(2)}/kg · ${item.carbonPerKg.toStringAsFixed(2)} kg CO₂/kg'
+              : item.category,
           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
         ),
         trailing: GestureDetector(
@@ -372,97 +496,92 @@ class _BasketInputScreenState extends State<BasketInputScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Basket items summary
-            if (_basket.isNotEmpty)
-              Container(
-                constraints: const BoxConstraints(maxHeight: 120),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _basket.length,
-                  itemBuilder: (_, i) {
-                    final item = _basket[i];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Row(
-                        children: [
-                          Text(
-                            item.emoji,
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              item.name,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 120),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _basket.length,
+                itemBuilder: (_, i) {
+                  final item = _basket[i];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        Text(item.emoji, style: const TextStyle(fontSize: 16)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          // Quantity controls
-                          GestureDetector(
-                            onTap: () => _adjustQuantity(i, -0.5),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceVariant,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: HugeIcon(
-                                icon: HugeIcons.strokeRoundedRemove01,
-                                color: AppColors.textSecondary,
-                                size: 14,
-                              ),
+                        ),
+                        GestureDetector(
+                          onTap: () => _adjustQuantity(i, -0.5),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceVariant,
+                              borderRadius: BorderRadius.circular(6),
                             ),
-                          ),
-                          SizedBox(
-                            width: 36,
-                            child: Text(
-                              '${item.quantity}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => _adjustQuantity(i, 0.5),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: HugeIcon(
-                                icon: HugeIcons.strokeRoundedAdd01,
-                                color: AppColors.primary,
-                                size: 14,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () => _removeFromBasket(i),
                             child: HugeIcon(
-                              icon: HugeIcons.strokeRoundedDelete02,
-                              color: AppColors.error,
-                              size: 18,
+                              icon: HugeIcons.strokeRoundedRemove01,
+                              color: AppColors.textSecondary,
+                              size: 14,
                             ),
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        ),
+                        SizedBox(
+                          width: 36,
+                          child: Text(
+                            '${item.quantity}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => _adjustQuantity(i, 0.5),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: HugeIcon(
+                              icon: HugeIcons.strokeRoundedAdd01,
+                              color: AppColors.primary,
+                              size: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => _removeFromBasket(i),
+                          child: HugeIcon(
+                            icon: HugeIcons.strokeRoundedDelete02,
+                            color: AppColors.error,
+                            size: 18,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
+            ),
             const SizedBox(height: 8),
-            // Stats row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${_basket.length} items · £${totalCost.toStringAsFixed(2)} · ${totalCarbon.toStringAsFixed(1)} kg CO₂',
+                  totalCost > 0
+                      ? '${_basket.length} items · £${totalCost.toStringAsFixed(2)} · ${totalCarbon.toStringAsFixed(1)} kg CO₂'
+                      : '${_basket.length} items selected',
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textSecondary,

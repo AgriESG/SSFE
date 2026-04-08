@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/onboarding_screen.dart';
-import 'services/food_database.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await FoodDatabase.load();
   runApp(const AgriESGApp());
 }
 
@@ -14,8 +12,6 @@ class AgriESGApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Always use MaterialApp to provide MaterialLocalizations.
-    // Platform-adaptive styling is applied via the theme and widgets.
     return MaterialApp(
       title: 'AgriESG Food Optimiser',
       debugShowCheckedModeBanner: false,
@@ -76,14 +72,14 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeController.forward();
     _slideController.forward();
 
-    // Navigate after splash
     Future.delayed(const Duration(milliseconds: 2800), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) =>
                 const OnboardingScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
             transitionDuration: const Duration(milliseconds: 500),
@@ -114,14 +110,12 @@ class _SplashScreenState extends State<SplashScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(flex: 3),
-              // Logo
               FadeTransition(
                 opacity: _fadeAnim,
                 child: SlideTransition(
                   position: _slideAnim,
                   child: Column(
                     children: [
-                      // App icon
                       ScaleTransition(
                         scale: _scaleBadge,
                         child: Container(
@@ -141,7 +135,6 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       ),
                       const SizedBox(height: 28),
-                      // Title
                       const Text(
                         'AgriESG',
                         style: TextStyle(
@@ -166,7 +159,6 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
               const Spacer(flex: 2),
-              // Bottom tagline
               FadeTransition(
                 opacity: _fadeAnim,
                 child: Column(
