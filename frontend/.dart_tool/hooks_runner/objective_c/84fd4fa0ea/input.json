@@ -22,9 +22,9 @@
     },
     "linking_enabled": false
   },
-  "out_dir_shared": "/Users/esther/Documents/GitHub/SSFE/frontend/.dart_tool/hooks_runner/shared/objective_c/build/",
-  "out_file": "/Users/esther/Documents/GitHub/SSFE/frontend/.dart_tool/hooks_runner/objective_c/84fd4fa0ea/output.json",
+  "out_dir_shared": "/Users/agriesg/Documents/GitHub/SSFE/frontend/.dart_tool/hooks_runner/shared/objective_c/build/",
+  "out_file": "/Users/agriesg/Documents/GitHub/SSFE/frontend/.dart_tool/hooks_runner/objective_c/84fd4fa0ea/output.json",
   "package_name": "objective_c",
-  "package_root": "/Users/esther/.pub-cache/hosted/pub.dev/objective_c-9.3.0/",
+  "package_root": "/Users/agriesg/.pub-cache/hosted/pub.dev/objective_c-9.3.0/",
   "user_defines": {}
 }

@@ -3,7 +3,7 @@ import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/user_preferences.dart';
 import '../widgets/adaptive_widgets.dart';
-import 'basket_input_screen.dart';
+import 'home_shell.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -72,10 +72,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _navigateToBasketInput() {
-    Navigator.of(context).push(
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => BasketInputScreen(preferences: _preferences),
+        builder: (_) => HomeShell(preferences: _preferences),
       ),
+      (route) => false,
     );
   }
 

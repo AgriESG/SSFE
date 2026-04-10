@@ -195,14 +195,7 @@ class _BasketInputScreenState extends State<BasketInputScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Build Your Basket'),
-        leading: IconButton(
-          icon: HugeIcon(
-            icon: HugeIcons.strokeRoundedArrowLeft01,
-            color: AppColors.primary,
-            size: 24,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: HugeIcon(
@@ -474,7 +467,8 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   }
 
   Widget _buildBasketSummary() {
-    if (_basket.isEmpty) return const SizedBox.shrink();
+    if (_basket.isEmpty) return _buildEmptyBasket();
+
 
     final totalCost = _basket.fold(0.0, (sum, i) => sum + i.totalPrice);
     final totalCarbon = _basket.fold(0.0, (sum, i) => sum + i.totalCarbon);
@@ -596,6 +590,60 @@ class _BasketInputScreenState extends State<BasketInputScreen>
               onPressed: _basket.isNotEmpty ? _navigateToImpact : null,
               isFullWidth: true,
               hugeIcon: HugeIcons.strokeRoundedAnalytics01,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyBasket() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                shape: BoxShape.circle,
+              ),
+              child: HugeIcon(
+                icon: HugeIcons.strokeRoundedShoppingBasket01,
+                color: AppColors.primary.withValues(alpha: 0.4),
+                size: 36,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Your basket is empty',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Search or paste items above to get started',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
         ),

@@ -1,0 +1,1 @@
+ /Users/agriesg/Documents/GitHub/SSFE/frontend/.dart_tool/flutter_build/e29e596ebc1e300b650eece1f29034f1/native_assets.json:  /Users/agriesg/Documents/GitHub/SSFE/frontend/.dart_tool/hooks_runner/shared/objective_c/build/84fd4fa0ea/objective_c.dylib
