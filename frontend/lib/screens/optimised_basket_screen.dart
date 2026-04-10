@@ -6,6 +6,7 @@ import '../models/user_preferences.dart';
 import '../services/api_service.dart';
 import '../widgets/adaptive_widgets.dart';
 import 'savings_impact_screen.dart';
+import 'swap_detail_screen.dart';
 
 class OptimisedBasketScreen extends StatefulWidget {
   final List<FoodItem> originalBasket;
@@ -234,14 +235,23 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
                 subtitle: '${result.substitutions.length} improvements found',
               ),
               ...result.substitutions.map(
-                (s) => SubstitutionCard(
-                  originalName: s.originalName,
-                  originalEmoji: _emojiFor(s.originalName),
-                  replacementName: s.substituteName,
-                  replacementEmoji: _emojiFor(s.substituteName),
-                  reason: s.rationale,
-                  carbonSaved: s.envDelta,
-                  costSaved: s.costDelta,
+                (s) => GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SwapDetailScreen(substitution: s),
+                      ),
+                    );
+                  },
+                  child: SubstitutionCard(
+                    originalName: s.originalName,
+                    originalEmoji: _emojiFor(s.originalName),
+                    replacementName: s.substituteName,
+                    replacementEmoji: _emojiFor(s.substituteName),
+                    reason: s.rationale,
+                    carbonSaved: s.envDelta,
+                    costSaved: s.costDelta,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),

@@ -3,7 +3,7 @@ import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../widgets/adaptive_widgets.dart';
-import 'onboarding_screen.dart';
+import 'swap_detail_screen.dart';
 
 class SavingsImpactScreen extends StatefulWidget {
   final ApiOptimisationResult result;
@@ -40,10 +40,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
   }
 
   void _startOver() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      (route) => false,
-    );
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   // Convenience getters — map API score deltas to display values
@@ -96,14 +93,23 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                   subtitle: 'Your most impactful swaps',
                 ),
                 ...widget.result.substitutions.take(3).map(
-                  (s) => SubstitutionCard(
-                    originalName: s.originalName,
-                    originalEmoji: _emojiFor(s.originalName),
-                    replacementName: s.substituteName,
-                    replacementEmoji: _emojiFor(s.substituteName),
-                    reason: s.rationale,
-                    carbonSaved: s.envDelta,
-                    costSaved: s.costDelta,
+                  (s) => GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => SwapDetailScreen(substitution: s),
+                        ),
+                      );
+                    },
+                    child: SubstitutionCard(
+                      originalName: s.originalName,
+                      originalEmoji: _emojiFor(s.originalName),
+                      replacementName: s.substituteName,
+                      replacementEmoji: _emojiFor(s.substituteName),
+                      reason: s.rationale,
+                      carbonSaved: s.envDelta,
+                      costSaved: s.costDelta,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
