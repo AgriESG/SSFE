@@ -41,8 +41,10 @@ from pathlib import Path
 # ─────────────────────────────────────────────
 # File paths — relative to project root (SSFE/)
 # ─────────────────────────────────────────────
-SUPPLY_DEMAND_PATH = Path("data/supply_demand.xlsx")
-ANIMAL_FEED_PATH = Path("data/animal_feed_production.xlsx")
+# Resolve path relative to this file so it works regardless of where uvicorn launches from
+_BASE = Path(__file__).resolve().parent.parent.parent
+SUPPLY_DEMAND_PATH = _BASE / "data" / "supply_demand.xlsx"
+ANIMAL_FEED_PATH = _BASE / "data" / "animal_feed_production.xlsx"
 
 # Grains tracked — these are the three cereals with
 # complete UK balance sheet data in the AHDB dataset
