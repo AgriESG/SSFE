@@ -188,6 +188,10 @@ class SubstitutionCard extends StatelessWidget {
   final String reason;
   final double carbonSaved;
   final double costSaved;
+  final double? supplyStability;
+  final double? realismScore;
+  final int? paretoRank;
+  final bool isLowRealism;
 
   const SubstitutionCard({
     super.key,
@@ -198,6 +202,10 @@ class SubstitutionCard extends StatelessWidget {
     required this.reason,
     required this.carbonSaved,
     required this.costSaved,
+    this.supplyStability,
+    this.realismScore,
+    this.paretoRank,
+    this.isLowRealism = false,
   });
 
   @override
@@ -302,7 +310,48 @@ class SubstitutionCard extends StatelessWidget {
                   '−£${costSaved.toStringAsFixed(2)}',
                   AppColors.costColor,
                 ),
+              const Spacer(),
+              if (paretoRank != null)
+                _intelligenceMarker(
+                  '#$paretoRank Rank',
+                  HugeIcons.strokeRoundedTarget02,
+                  AppColors.primary,
+                ),
+              if (isLowRealism) ...[
+                const SizedBox(width: 8),
+                _intelligenceMarker(
+                  'Stretch',
+                  HugeIcons.strokeRoundedAlertCircle,
+                  AppColors.warning,
+                ),
+              ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _intelligenceMarker(String text, List<List<dynamic>> icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          HugeIcon(icon: icon, color: color, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: color.withValues(alpha: 0.8),
+              letterSpacing: 0.2,
+            ),
           ),
         ],
       ),

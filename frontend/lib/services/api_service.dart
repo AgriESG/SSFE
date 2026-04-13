@@ -40,13 +40,34 @@ class ApiOptimisationResult {
   final List<ApiSubstitution> substitutions;
   final ApiBasketComparison comparison;
   final List<String> insights;
+  final ApiSupplyPressure? supplyPressure;
 
   ApiOptimisationResult({
     required this.optimisedBasket,
     required this.substitutions,
     required this.comparison,
     required this.insights,
+    this.supplyPressure,
   });
+}
+
+class ApiSupplyPressure {
+  final Map<String, double> grainPressure;
+  final Map<String, double> foodCategoryPressure;
+
+  ApiSupplyPressure({
+    required this.grainPressure,
+    required this.foodCategoryPressure,
+  });
+
+  factory ApiSupplyPressure.fromJson(Map<String, dynamic> j) => ApiSupplyPressure(
+        grainPressure: (j['grain_pressure'] as Map? ?? {}).map(
+          (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
+        ),
+        foodCategoryPressure: (j['food_category_pressure'] as Map? ?? {}).map(
+          (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
+        ),
+      );
 }
 
 class ApiSubstitution {
@@ -60,6 +81,12 @@ class ApiSubstitution {
   final double costDelta;
   final double nutritionDelta;
   final String rationale;
+  final double supplyStability;
+  final double realismScore;
+  final int paretoRank;
+  final int paretoFrontSize;
+  final Map<String, double> weightsApplied;
+  final bool humanFlaggedLowRealism;
 
   ApiSubstitution({
     required this.originalId,
@@ -72,6 +99,12 @@ class ApiSubstitution {
     required this.costDelta,
     required this.nutritionDelta,
     required this.rationale,
+    required this.supplyStability,
+    required this.realismScore,
+    required this.paretoRank,
+    required this.paretoFrontSize,
+    required this.weightsApplied,
+    required this.humanFlaggedLowRealism,
   });
 
   factory ApiSubstitution.fromJson(Map<String, dynamic> j) => ApiSubstitution(
@@ -85,6 +118,14 @@ class ApiSubstitution {
         costDelta: (j['cost_delta'] ?? 0).toDouble(),
         nutritionDelta: (j['nutrition_delta'] ?? 0).toDouble(),
         rationale: j['rationale'] ?? '',
+        supplyStability: (j['supply_stability'] ?? 0).toDouble(),
+        realismScore: (j['realism_score'] ?? 0).toDouble(),
+        paretoRank: j['pareto_rank'] ?? 0,
+        paretoFrontSize: j['pareto_front_size'] ?? 0,
+        weightsApplied: (j['weights_applied'] as Map? ?? {}).map(
+          (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
+        ),
+        humanFlaggedLowRealism: j['human_flagged_low_realism'] ?? false,
       );
 }
 
@@ -280,11 +321,16 @@ class ApiService {
 
     final insights = _generateInsights(comparison, substitutions);
 
+    final supplyPressure = data['supply_pressure_index'] != null
+        ? ApiSupplyPressure.fromJson(data['supply_pressure_index'] as Map<String, dynamic>)
+        : null;
+
     return ApiOptimisationResult(
       optimisedBasket: optimisedBasket,
       substitutions: substitutions,
       comparison: comparison,
       insights: insights,
+      supplyPressure: supplyPressure,
     );
   }
 

@@ -228,6 +228,8 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildComparisonBanner(result),
+            const SizedBox(height: 16),
+            if (result.supplyPressure != null) _buildSupplyPressureBanner(result.supplyPressure!),
             const SizedBox(height: 24),
             if (result.substitutions.isNotEmpty) ...[
               SectionHeader(
@@ -251,6 +253,10 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
                     reason: s.rationale,
                     carbonSaved: s.envDelta,
                     costSaved: s.costDelta,
+                    supplyStability: s.supplyStability,
+                    realismScore: s.realismScore,
+                    paretoRank: s.paretoRank,
+                    isLowRealism: s.humanFlaggedLowRealism,
                   ),
                 ),
               ),
@@ -492,6 +498,112 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
           fontWeight: FontWeight.w600,
           color: color,
         ),
+      ),
+    );
+  }
+
+  Widget _buildSupplyPressureBanner(ApiSupplyPressure pressure) {
+    // Find highest pressure to show a quick status
+    final allPressures = [
+      ...pressure.grainPressure.values,
+      ...pressure.foodCategoryPressure.values,
+    ];
+    final maxP = allPressures.isNotEmpty ? allPressures.reduce((a, b) => a > b ? a : b) : 0.0;
+    
+    final Color statusColor = maxP > 0.7 ? AppColors.error : (maxP > 0.4 ? AppColors.warning : AppColors.success);
+    final String statusText = maxP > 0.7 ? 'High Supply Stress' : (maxP > 0.4 ? 'Moderate Pressure' : 'Stable Supply');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              HugeIcon(icon: HugeIcons.strokeRoundedAnalytics01, color: statusColor, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                'Supply Chain Outlook',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Grains Pressure', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    ...pressure.grainPressure.entries.map((e) => _pressureRow(e.key, e.value)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Category Stress', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    ...pressure.foodCategoryPressure.entries.take(3).map((e) => _pressureRow(e.key, e.value)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pressureRow(String label, double value) {
+    final Color color = value > 0.7 ? AppColors.error : (value > 0.4 ? AppColors.warning : AppColors.success);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          ),
+          Container(
+            width: 32,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: value.clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

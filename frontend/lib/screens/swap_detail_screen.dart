@@ -73,8 +73,9 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Swap Details'),
+        title: const Text('Swap Intelligence'),
         leading: IconButton(
           icon: HugeIcon(
             icon: HugeIcons.strokeRoundedArrowLeft01,
@@ -97,10 +98,10 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(),
+          CircularProgressIndicator(color: AppColors.primary),
           SizedBox(height: 16),
           Text(
-            'Loading comparison...',
+            'Analyzing supply chain & impact...',
             style: TextStyle(color: AppColors.textSecondary),
           ),
         ],
@@ -150,6 +151,7 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
     final swap = _substitute!;
 
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,12 +159,18 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
           _buildSwapBanner(orig, swap),
           const SizedBox(height: 24),
 
+          _buildQuickStats(),
+          const SizedBox(height: 24),
+
           _buildRationaleCard(),
           const SizedBox(height: 24),
 
+          _buildSupplyChainSection(),
+          const SizedBox(height: 24),
+
           const SectionHeader(
-            title: 'Carbon Footprint',
-            subtitle: 'CO₂ emissions per kilogram',
+            title: 'Environmental Footprint',
+            subtitle: 'CO₂ emissions & resource usage',
           ),
           _buildComparisonBar(
             'Carbon',
@@ -173,11 +181,13 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
             AppColors.carbonColor,
             lowerIsBetter: true,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          _buildEnvDetails(orig, swap),
+          const SizedBox(height: 24),
 
           const SectionHeader(
-            title: 'Cost',
-            subtitle: 'Price per kilogram',
+            title: 'Economic & Nutritional',
+            subtitle: 'Cost efficiency and health profile',
           ),
           _buildComparisonBar(
             'Price',
@@ -188,24 +198,12 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
             AppColors.costColor,
             lowerIsBetter: true,
           ),
-          const SizedBox(height: 20),
-
-          const SectionHeader(
-            title: 'Nutrition',
-            subtitle: 'Macros per kilogram',
-          ),
+          const SizedBox(height: 12),
           _buildNutritionComparison(orig, swap),
           const SizedBox(height: 24),
 
-          const SectionHeader(
-            title: 'Environmental Details',
-            subtitle: 'Water and land impact',
-          ),
-          _buildEnvDetails(orig, swap),
-          const SizedBox(height: 24),
-
-          _buildScoreCard(),
-          const SizedBox(height: 24),
+          _buildOptimisationInsights(),
+          const SizedBox(height: 32),
 
           AdaptiveButton(
             label: 'Accept This Swap',
@@ -221,7 +219,7 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
             isPrimary: false,
             hugeIcon: HugeIcons.strokeRoundedCancel01,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -235,110 +233,145 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF2D6A4F), Color(0xFF52B788)],
+          colors: [Color(0xFF1B4332), Color(0xFF2D6A4F)],
         ),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
+            color: AppColors.primary.withValues(alpha: 0.2),
             blurRadius: 20,
-            offset: const Offset(0, 8),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(orig.emoji, style: const TextStyle(fontSize: 40)),
-                    const SizedBox(height: 8),
-                    Text(
-                      orig.name,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.7),
-                        decoration: TextDecoration.lineThrough,
-                        decorationColor: Colors.white.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Original',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                  ],
+          Expanded(
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(orig.emoji, style: const TextStyle(fontSize: 32)),
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
+                const SizedBox(height: 12),
+                Text(
+                  orig.name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    decoration: TextDecoration.lineThrough,
+                  ),
                 ),
-                child: HugeIcon(
-                  icon: HugeIcons.strokeRoundedArrowRight01,
-                  color: Colors.white,
-                  size: 24,
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: HugeIcon(
+              icon: HugeIcons.strokeRoundedArrowRight01,
+              color: AppColors.accent,
+              size: 24,
+            ),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(swap.emoji, style: const TextStyle(fontSize: 32)),
                 ),
-              ),
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(swap.emoji, style: const TextStyle(fontSize: 40)),
-                    const SizedBox(height: 8),
-                    Text(
-                      swap.name,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Suggested',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 12),
+                Text(
+                  swap.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStats() {
+    return Row(
+      children: [
+        _statItem(
+          'Stability',
+          '${(sub.supplyStability * 100).toStringAsFixed(0)}%',
+          HugeIcons.strokeRoundedAnalyticsUp,
+          AppColors.info,
+        ),
+        const SizedBox(width: 12),
+        _statItem(
+          'Realism',
+          '${(sub.realismScore * 100).toStringAsFixed(0)}%',
+          HugeIcons.strokeRoundedUserGroup,
+          AppColors.accentDark,
+        ),
+        const SizedBox(width: 12),
+        _statItem(
+          'Rank',
+          '#${sub.paretoRank}',
+          HugeIcons.strokeRoundedTarget02,
+          AppColors.success,
+        ),
+      ],
+    );
+  }
+
+  Widget _statItem(String label, String value, List<List<dynamic>> icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.1)),
+        ),
+        child: Column(
+          children: [
+            HugeIcon(icon: icon, color: color, size: 20),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: color.withValues(alpha: 0.7),
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -346,44 +379,207 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
   Widget _buildRationaleCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              HugeIcon(
-                icon: HugeIcons.strokeRoundedIdea,
-                color: AppColors.primary,
-                size: 20,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: HugeIcon(
+                  icon: HugeIcons.strokeRoundedIdea,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               const Text(
-                'Why This Swap?',
+                'Selection Rationale',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+                  color: AppColors.textPrimary,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           Text(
-            sub.rationale.isNotEmpty
-                ? sub.rationale
-                : 'This substitution improves your basket\'s overall sustainability, '
-                    'cost, and nutrition profile.',
+            sub.rationale,
             style: const TextStyle(
               fontSize: 14,
               color: AppColors.textPrimary,
+              height: 1.6,
+            ),
+          ),
+          if (sub.humanFlaggedLowRealism) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedAlertCircle,
+                    color: AppColors.warning.withValues(alpha: 0.7),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'This swap is identified as a behavioral stretch.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF856404),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupplyChainSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionHeader(
+          title: 'Supply & Realism',
+          subtitle: 'UK agricultural data vs behavioral patterns',
+        ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+          ),
+          child: Column(
+            children: [
+              _buildStabilityBar('UK Supply Stability', sub.supplyStability),
+              const SizedBox(height: 20),
+              _buildStabilityBar('Behavioral Realism', sub.realismScore),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStabilityBar(String label, double value) {
+    Color barColor = value > 0.7 
+        ? AppColors.success 
+        : (value > 0.4 ? AppColors.warning : AppColors.error);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            Text(
+              '${(value * 100).toStringAsFixed(0)}%',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: barColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: value,
+            minHeight: 8,
+            backgroundColor: barColor.withValues(alpha: 0.1),
+            valueColor: AlwaysStoppedAnimation<Color>(barColor),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOptimisationInsights() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Mathematical Context',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'This swap was selected from a frontier of ${sub.paretoFrontSize} Pareto-efficient options. It was ranked #${sub.paretoRank} based on your current weighting profiles:',
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
               height: 1.5,
             ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: sub.weightsApplied.entries.map((e) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                ),
+                child: Text(
+                  '${e.key}: ${(e.value * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),
@@ -439,9 +635,9 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
                   height: 8,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               SizedBox(
-                width: 100,
+                width: 90,
                 child: Text(
                   origLabel,
                   textAlign: TextAlign.right,
@@ -454,7 +650,7 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
               SizedBox(
@@ -475,9 +671,9 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
                   height: 8,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               SizedBox(
-                width: 100,
+                width: 90,
                 child: Text(
                   swapLabel,
                   textAlign: TextAlign.right,
@@ -490,8 +686,8 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          if (swapBetter)
+          if (swapBetter) ...[
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
@@ -499,14 +695,15 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '✓ $pct% ${lowerIsBetter ? "lower" : "higher"} with the swap',
+                '✓ $pct% ${lowerIsBetter ? "reduction" : "improvement"} with swap',
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.success,
                 ),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -522,11 +719,11 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
       ),
       child: Column(
         children: [
-          _nutritionRow('Protein', orig.proteinPerKg, swap.proteinPerKg, 'g/kg'),
+          _nutritionRow('Protein', orig.proteinPerKg, swap.proteinPerKg, 'g'),
           const Divider(height: 16, color: AppColors.divider),
-          _nutritionRow('Calories', orig.caloriesPerKg, swap.caloriesPerKg, 'kcal/kg'),
+          _nutritionRow('Calories', orig.caloriesPerKg, swap.caloriesPerKg, 'kcal'),
           const Divider(height: 16, color: AppColors.divider),
-          _nutritionRow('Fibre', orig.fibrePerKg, swap.fibrePerKg, 'g/kg'),
+          _nutritionRow('Fibre', orig.fibrePerKg, swap.fibrePerKg, 'g'),
         ],
       ),
     );
@@ -550,7 +747,7 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
         ),
         Expanded(
           child: Text(
-            '${orig.toStringAsFixed(0)} $unit',
+            '${orig.toStringAsFixed(0)}$unit',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13,
@@ -560,12 +757,12 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
         ),
         Expanded(
           child: Text(
-            '${swap.toStringAsFixed(0)} $unit',
+            '${swap.toStringAsFixed(0)}$unit',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isPositive ? AppColors.success : AppColors.error,
+              fontWeight: FontWeight.w700,
+              color: isPositive ? AppColors.success : AppColors.textPrimary,
             ),
           ),
         ),
@@ -598,16 +795,16 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
           _envRow(
             '💧',
             'Water Usage',
-            '${orig.waterPerKg.toStringAsFixed(0)} L/kg',
-            '${swap.waterPerKg.toStringAsFixed(0)} L/kg',
+            '${orig.waterPerKg.toStringAsFixed(0)}L',
+            '${swap.waterPerKg.toStringAsFixed(0)}L',
             swap.waterPerKg < orig.waterPerKg,
           ),
           const Divider(height: 16, color: AppColors.divider),
           _envRow(
             '🌍',
             'Land Use',
-            '${orig.landPerKg.toStringAsFixed(1)} m²/kg',
-            '${swap.landPerKg.toStringAsFixed(1)} m²/kg',
+            '${orig.landPerKg.toStringAsFixed(1)}m²',
+            '${swap.landPerKg.toStringAsFixed(1)}m²',
             swap.landPerKg < orig.landPerKg,
           ),
         ],
@@ -631,7 +828,7 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
           child: Text(
             label,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
             ),
@@ -650,7 +847,7 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: improved ? AppColors.success : AppColors.textPrimary,
             ),
           ),
@@ -672,97 +869,5 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
       ],
     );
   }
-
-  Widget _buildScoreCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.success.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Score Improvements',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _scoreRow(
-            'Overall',
-            sub.improvementScore,
-            HugeIcons.strokeRoundedAnalyticsUp,
-          ),
-          const SizedBox(height: 8),
-          _scoreRow(
-            'Environmental',
-            sub.envDelta,
-            HugeIcons.strokeRoundedCloud,
-          ),
-          const SizedBox(height: 8),
-          _scoreRow(
-            'Cost',
-            sub.costDelta,
-            HugeIcons.strokeRoundedCoinsPound,
-          ),
-          const SizedBox(height: 8),
-          _scoreRow(
-            'Nutrition',
-            sub.nutritionDelta,
-            HugeIcons.strokeRoundedOrganicFood,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _scoreRow(
-    String label,
-    double delta,
-    List<List<dynamic>> icon,
-  ) {
-    final isPositive = delta >= 0;
-    return Row(
-      children: [
-        HugeIcon(
-          icon: icon,
-          color: isPositive ? AppColors.success : AppColors.error,
-          size: 18,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: (isPositive ? AppColors.success : AppColors.error)
-                .withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            '${isPositive ? "+" : ""}${delta.toStringAsFixed(1)} pts',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: isPositive ? AppColors.success : AppColors.error,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
+
