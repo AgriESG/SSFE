@@ -51,9 +51,9 @@
     },
     {
       "name": "cupertino_icons",
-      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/cupertino_icons-1.0.8",
+      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/cupertino_icons-1.0.9",
       "packageUri": "lib/",
-      "languageVersion": "3.1"
+      "languageVersion": "3.9"
     },
     {
       "name": "equatable",
@@ -81,9 +81,9 @@
     },
     {
       "name": "fl_chart",
-      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/fl_chart-0.70.2",
+      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/fl_chart-1.2.0",
       "packageUri": "lib/",
-      "languageVersion": "3.2"
+      "languageVersion": "3.6"
     },
     {
       "name": "flutter",
@@ -117,7 +117,7 @@
     },
     {
       "name": "google_fonts",
-      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/google_fonts-6.3.3",
+      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/google_fonts-8.1.0",
       "packageUri": "lib/",
       "languageVersion": "3.9"
     },
@@ -141,7 +141,7 @@
     },
     {
       "name": "hugeicons",
-      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/hugeicons-1.1.5",
+      "rootUri": "file:///Users/agriesg/.pub-cache/hosted/pub.dev/hugeicons-1.1.6",
       "packageUri": "lib/",
       "languageVersion": "2.18"
     },
@@ -387,8 +387,8 @@
     }
   ],
   "generator": "pub",
-  "generatorVersion": "3.11.1",
+  "generatorVersion": "3.11.5",
   "flutterRoot": "file:///Users/agriesg/development/flutter",
-  "flutterVersion": "3.41.4",
+  "flutterVersion": "3.41.7",
   "pubCache": "file:///Users/agriesg/.pub-cache"
 }

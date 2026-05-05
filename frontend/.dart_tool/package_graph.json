@@ -56,7 +56,7 @@
     },
     {
       "name": "google_fonts",
-      "version": "6.3.3",
+      "version": "8.1.0",
       "dependencies": [
         "crypto",
         "flutter",
@@ -66,7 +66,7 @@
     },
     {
       "name": "hugeicons",
-      "version": "1.1.5",
+      "version": "1.1.6",
       "dependencies": [
         "flutter",
         "flutter_svg"
@@ -74,7 +74,7 @@
     },
     {
       "name": "fl_chart",
-      "version": "0.70.2",
+      "version": "1.2.0",
       "dependencies": [
         "equatable",
         "flutter",
@@ -83,7 +83,7 @@
     },
     {
       "name": "cupertino_icons",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "dependencies": []
     },
     {

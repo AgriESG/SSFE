@@ -9,10 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
-  fl_chart: ^0.70.2
-  hugeicons: ^1.1.5
-  google_fonts: ^6.2.1
+  cupertino_icons: ^1.0.9
+  fl_chart: ^1.2.0
+  hugeicons: ^1.1.6
+  google_fonts: ^8.1.0
   http: ^1.6.0
 
 dev_dependencies:

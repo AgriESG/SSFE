@@ -120,7 +120,10 @@ class MetricCard extends StatelessWidget {
               const Spacer(),
               if (changeText != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: (isPositive ? AppColors.success : AppColors.error)
                         .withValues(alpha: 0.12),
@@ -261,7 +264,10 @@ class SubstitutionCard extends StatelessWidget {
               Expanded(
                 child: Row(
                   children: [
-                    Text(replacementEmoji, style: const TextStyle(fontSize: 24)),
+                    Text(
+                      replacementEmoji,
+                      style: const TextStyle(fontSize: 24),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -332,7 +338,11 @@ class SubstitutionCard extends StatelessWidget {
     );
   }
 
-  Widget _intelligenceMarker(String text, List<List<dynamic>> icon, Color color) {
+  Widget _intelligenceMarker(
+    String text,
+    List<List<dynamic>> icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -382,11 +392,7 @@ class SectionHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
 
-  const SectionHeader({
-    super.key,
-    required this.title,
-    this.subtitle,
-  });
+  const SectionHeader({super.key, required this.title, this.subtitle});
 
   @override
   Widget build(BuildContext context) {
