@@ -1,13 +1,12 @@
 #!/bin/sh
 set -e
 
-# Install Flutter
-git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$HOME/flutter"
-export PATH="$PATH:$HOME/flutter/bin"
+FLUTTER_DIR="$HOME/flutter"
+git clone https://github.com/flutter/flutter.git --depth 1 -b stable "$FLUTTER_DIR"
+export PATH="$PATH:$FLUTTER_DIR/bin"
 
-# Pre-cache iOS tools
-flutter precache --ios
+"$FLUTTER_DIR/bin/flutter" precache --ios
 
-# Get Flutter packages
 cd "$CI_PRIMARY_REPOSITORY_PATH/frontend"
-flutter pub get
+"$FLUTTER_DIR/bin/flutter" pub get
+"$FLUTTER_DIR/bin/flutter" build ios --no-codesign --config-only
