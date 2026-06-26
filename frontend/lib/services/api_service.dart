@@ -60,8 +60,7 @@ class ApiSupplyPressure {
     required this.foodCategoryPressure,
   });
 
-  factory ApiSupplyPressure.fromJson(Map<String, dynamic> j) =>
-      ApiSupplyPressure(
+  factory ApiSupplyPressure.fromJson(Map<String, dynamic> j) => ApiSupplyPressure(
         grainPressure: (j['grain_pressure'] as Map? ?? {}).map(
           (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
         ),
@@ -109,25 +108,25 @@ class ApiSubstitution {
   });
 
   factory ApiSubstitution.fromJson(Map<String, dynamic> j) => ApiSubstitution(
-    originalId: j['original_id'] ?? '',
-    originalName: j['original_name'] ?? '',
-    substituteId: j['substitute_id'] ?? '',
-    substituteName: j['substitute_name'] ?? '',
-    role: j['role'] ?? '',
-    improvementScore: (j['improvement_score'] ?? 0).toDouble(),
-    envDelta: (j['env_delta'] ?? 0).toDouble(),
-    costDelta: (j['cost_delta'] ?? 0).toDouble(),
-    nutritionDelta: (j['nutrition_delta'] ?? 0).toDouble(),
-    rationale: j['rationale'] ?? '',
-    supplyStability: (j['supply_stability'] ?? 0).toDouble(),
-    realismScore: (j['realism_score'] ?? 0).toDouble(),
-    paretoRank: j['pareto_rank'] ?? 0,
-    paretoFrontSize: j['pareto_front_size'] ?? 0,
-    weightsApplied: (j['weights_applied'] as Map? ?? {}).map(
-      (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
-    ),
-    humanFlaggedLowRealism: j['human_flagged_low_realism'] ?? false,
-  );
+        originalId: j['original_id'] ?? '',
+        originalName: j['original_name'] ?? '',
+        substituteId: j['substitute_id'] ?? '',
+        substituteName: j['substitute_name'] ?? '',
+        role: j['role'] ?? '',
+        improvementScore: (j['improvement_score'] ?? 0).toDouble(),
+        envDelta: (j['env_delta'] ?? 0).toDouble(),
+        costDelta: (j['cost_delta'] ?? 0).toDouble(),
+        nutritionDelta: (j['nutrition_delta'] ?? 0).toDouble(),
+        rationale: j['rationale'] ?? '',
+        supplyStability: (j['supply_stability'] ?? 0).toDouble(),
+        realismScore: (j['realism_score'] ?? 0).toDouble(),
+        paretoRank: j['pareto_rank'] ?? 0,
+        paretoFrontSize: j['pareto_front_size'] ?? 0,
+        weightsApplied: (j['weights_applied'] as Map? ?? {}).map(
+          (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
+        ),
+        humanFlaggedLowRealism: j['human_flagged_low_realism'] ?? false,
+      );
 }
 
 class ApiBasketSummary {
@@ -144,11 +143,11 @@ class ApiBasketSummary {
   });
 
   factory ApiBasketSummary.fromJson(Map<String, dynamic> j) => ApiBasketSummary(
-    basketScore: (j['basket_score'] ?? 0).toDouble(),
-    avgEnvScore: (j['avg_env_score'] ?? 0).toDouble(),
-    avgNutritionScore: (j['avg_nutrition_score'] ?? 0).toDouble(),
-    avgCostScore: (j['avg_cost_score'] ?? 0).toDouble(),
-  );
+        basketScore: (j['basket_score'] ?? 0).toDouble(),
+        avgEnvScore: (j['avg_env_score'] ?? 0).toDouble(),
+        avgNutritionScore: (j['avg_nutrition_score'] ?? 0).toDouble(),
+        avgCostScore: (j['avg_cost_score'] ?? 0).toDouble(),
+      );
 }
 
 class ApiBasketComparison {
@@ -184,9 +183,9 @@ class ApiService {
   static final _client = http.Client();
 
   static Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
 
   // -------------------------------------------------------------------------
   // Health check — use at startup to verify backend is reachable
@@ -215,9 +214,7 @@ class ApiService {
     _checkStatus(res);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     final List foods = data['foods'] ?? [];
-    return foods
-        .map((f) => FoodItem.fromApiJson(f as Map<String, dynamic>))
-        .toList();
+    return foods.map((f) => FoodItem.fromApiJson(f as Map<String, dynamic>)).toList();
   }
 
   // -------------------------------------------------------------------------
@@ -236,9 +233,7 @@ class ApiService {
     _checkStatus(res);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     final List results = data['results'] ?? [];
-    return results
-        .map((f) => FoodItem.fromApiJson(f as Map<String, dynamic>))
-        .toList();
+    return results.map((f) => FoodItem.fromApiJson(f as Map<String, dynamic>)).toList();
   }
 
   // -------------------------------------------------------------------------
@@ -247,7 +242,10 @@ class ApiService {
 
   static Future<FoodItem> getFood(String foodId) async {
     final res = await _client
-        .get(Uri.parse('${ApiConfig.baseUrl}/foods/$foodId'), headers: _headers)
+        .get(
+          Uri.parse('${ApiConfig.baseUrl}/foods/$foodId'),
+          headers: _headers,
+        )
         .timeout(const Duration(seconds: 10));
 
     _checkStatus(res);
@@ -324,9 +322,7 @@ class ApiService {
     final insights = _generateInsights(comparison, substitutions);
 
     final supplyPressure = data['supply_pressure_index'] != null
-        ? ApiSupplyPressure.fromJson(
-            data['supply_pressure_index'] as Map<String, dynamic>,
-          )
+        ? ApiSupplyPressure.fromJson(data['supply_pressure_index'] as Map<String, dynamic>)
         : null;
 
     return ApiOptimisationResult(
@@ -373,13 +369,13 @@ class ApiService {
   }
 
   static Map<String, dynamic> _preferencesToJson(UserPreferences prefs) => {
-    'diet_type': prefs.dietType.name,
-    'sustainability_priority': prefs.sustainabilityPriority.name,
-    'budget_preference': prefs.budgetPreference.name,
-    'nutrition_goal': prefs.nutritionGoal.name,
-    'allergies': prefs.allergies,
-    'dislikes': prefs.dislikes,
-  };
+        'diet_type': prefs.dietType.name,
+        'sustainability_priority': prefs.sustainabilityPriority.name,
+        'budget_preference': prefs.budgetPreference.name,
+        'nutrition_goal': prefs.nutritionGoal.name,
+        'allergies': prefs.allergies,
+        'dislikes': prefs.dislikes,
+      };
 
   static List<String> _generateInsights(
     ApiBasketComparison comparison,
