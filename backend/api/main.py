@@ -39,7 +39,7 @@ from services.data_loader import load_food_data
 from engines.supply_pressure import get_supply_pressure_index
 from engines.pareto_optimiser import optimise_substitutions
 from engines.behavioural_realism import filter_by_realism
-
+from api.metrics import RequestCounterMiddleware, router as metrics_router
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
@@ -56,7 +56,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+app.add_middleware(RequestCounterMiddleware)
+app.include_router(metrics_router)
 # ---------------------------------------------------------------------------
 # Role normalisation
 # Collapses inconsistent Role column values into functional roles
