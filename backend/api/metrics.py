@@ -14,6 +14,9 @@ Design notes:
 - Counting is fire-and-forget in a background task: if Upstash is slow
   or down, API responses are never delayed and never fail because of
   metrics.
+- Endpoints are counted by their route TEMPLATE, not the raw path, so
+  /foods/C01 and /foods/P29 both count as one endpoint (foods_food_id)
+  instead of spawning a separate counter per food ID.
 - Keys:
     m:total                          -> all counted requests ever
     m:endpoint:<slug>                -> per-endpoint total
@@ -61,13 +64,28 @@ async def _pipeline(commands):
         return None
 
 
+def _slug_for(request, path):
+    """Build the endpoint slug from the matched route template so path
+    params (food IDs) collapse into one counter. Falls back to the raw
+    path if no route matched (e.g. 404s)."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None) or path
+    return (
+        template.strip("/")
+        .replace("/", "_")
+        .replace("{", "")
+        .replace("}", "")
+        or "root"
+    )
+
+
 class RequestCounterMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
         path = request.url.path
         if path not in EXCLUDED_PATHS and response.status_code < 500:
             today = datetime.date.today().isoformat()
-            slug = path.strip("/").replace("/", "_") or "root"
+            slug = _slug_for(request, path)
             keys = [
                 "m:total",
                 f"m:endpoint:{slug}",
