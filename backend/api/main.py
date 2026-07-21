@@ -28,6 +28,7 @@ The /optimise-basket endpoint now runs a three-stage pipeline:
 """
 
 import math
+import asyncio
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -39,8 +40,7 @@ from services.data_loader import load_food_data
 from engines.supply_pressure import get_supply_pressure_index
 from engines.pareto_optimiser import optimise_substitutions
 from engines.behavioural_realism import filter_by_realism
-from api.metrics import RequestCounterMiddleware, router as metrics_router
-# ---------------------------------------------------------------------------
+from api.metrics import RequestCounterMiddleware, router as metrics_router, _pipeline# ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
@@ -609,3 +609,36 @@ def supply_pressure():
         "description": "Supply pressure scores derived from AHDB UK cereal balance sheet data. "
                        "Higher score = more supply pressure = greater price volatility risk.",
     }
+# ---------------------------------------------------------------------------
+# Swap feedback telemetry
+# Anonymous accept/dismiss counts — no user identifiers collected
+# ---------------------------------------------------------------------------
+
+import datetime as _dt
+
+
+class SwapFeedbackRequest(BaseModel):
+    original_id: str = Field(..., description="food_id of the original item, e.g. 'P01'")
+    substitute_id: str = Field(..., description="food_id of the suggested substitute, e.g. 'P02'")
+    accepted: bool = Field(..., description="true if the user accepted the swap, false if dismissed")
+
+
+@app.post("/swap-feedback")
+async def swap_feedback(request: SwapFeedbackRequest):
+    """
+    Record a user's accept/dismiss decision on a suggested swap.
+    Anonymous — counts only, no user identifiers stored.
+    """
+    outcome = "accepted" if request.accepted else "dismissed"
+    today = _dt.date.today().isoformat()
+    pair = f"{request.original_id.upper()}-{request.substitute_id.upper()}"
+
+    keys = [
+        f"m:swaps_{outcome}",
+        f"m:swaps_{outcome}:daily:{today}",
+        f"m:swappair:{pair}:{outcome}",
+    ]
+    # Fire and forget — telemetry must never slow or fail the app.
+    asyncio.create_task(_pipeline([["INCR", k] for k in keys]))
+
+    return {"status": "recorded", "outcome": outcome}
