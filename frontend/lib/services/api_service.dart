@@ -354,6 +354,37 @@ class ApiService {
   }
 
   // -------------------------------------------------------------------------
+  // Swap feedback telemetry
+  //
+  // Records whether a suggested substitution was accepted or dismissed.
+  // Deliberately fire and forget: returns void so it can never be awaited
+  // by mistake, skips _checkStatus so a telemetry failure never surfaces
+  // to the user, and swallows network errors so an offline device does
+  // not throw an unhandled async error mid-swap.
+  //
+  // Note the field names: the model is camelCase, the API expects
+  // snake_case, so the mapping happens here.
+  // -------------------------------------------------------------------------
+
+  static void sendSwapFeedback(
+    ApiSubstitution substitution, {
+    required bool accepted,
+  }) {
+    _client
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/swap-feedback'),
+          headers: _headers,
+          body: jsonEncode({
+            'original_id': substitution.originalId,
+            'substitute_id': substitution.substituteId,
+            'accepted': accepted,
+          }),
+        )
+        .timeout(const Duration(seconds: 5))
+        .catchError((_) => http.Response('', 599));
+  }
+
+  // -------------------------------------------------------------------------
   // Internal helpers
   // -------------------------------------------------------------------------
 

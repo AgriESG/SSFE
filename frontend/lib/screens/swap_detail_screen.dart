@@ -207,14 +207,22 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
 
           AdaptiveButton(
             label: 'Accept This Swap',
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () {
+              // Telemetry: fire and forget, never blocks the pop.
+              ApiService.sendSwapFeedback(sub, accepted: true);
+              Navigator.pop(context, true);
+            },
             isFullWidth: true,
             hugeIcon: HugeIcons.strokeRoundedTick02,
           ),
           const SizedBox(height: 8),
           AdaptiveButton(
             label: 'Keep Original',
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () {
+              // Telemetry: fire and forget, never blocks the pop.
+              ApiService.sendSwapFeedback(sub, accepted: false);
+              Navigator.pop(context, false);
+            },
             isFullWidth: true,
             isPrimary: false,
             hugeIcon: HugeIcons.strokeRoundedCancel01,
@@ -870,4 +878,3 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
     );
   }
 }
-
