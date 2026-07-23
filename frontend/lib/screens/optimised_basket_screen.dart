@@ -28,6 +28,12 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
   bool _isOptimising = true;
   String? _errorMessage;
 
+  // Substitutions the user chose to revert, keyed by originalId.
+  // The API returns a basket with every suggested swap already applied, so
+  // "Keep Original" is a revert and "Accept This Swap" is a no-op or an undo
+  // of a previous revert.
+  final Set<String> _revertedIds = {};
+
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
@@ -215,6 +221,24 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
   }
 
   // ---------------------------------------------------------------------------
+  // Basket as currently displayed: reverted swaps show the original item again.
+  // ---------------------------------------------------------------------------
+
+  List<FoodItem> get _displayBasket {
+    final result = _result!;
+    return result.optimisedBasket.map((item) {
+      for (final s in result.substitutions) {
+        if (s.substituteId == item.id && _revertedIds.contains(s.originalId)) {
+          for (final o in widget.originalBasket) {
+            if (o.id == s.originalId) return o;
+          }
+        }
+      }
+      return item;
+    }).toList();
+  }
+
+  // ---------------------------------------------------------------------------
   // Results state — same UI, now using ApiOptimisationResult
   // ---------------------------------------------------------------------------
 
@@ -238,12 +262,20 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
               ),
               ...result.substitutions.map(
                 (s) => GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).push(
+                  onTap: () async {
+                    final accepted = await Navigator.of(context).push<bool>(
                       MaterialPageRoute(
                         builder: (_) => SwapDetailScreen(substitution: s),
                       ),
                     );
+                    if (!mounted) return;
+                    setState(() {
+                      if (accepted == false) {
+                        _revertedIds.add(s.originalId);
+                      } else if (accepted == true) {
+                        _revertedIds.remove(s.originalId);
+                      }
+                    });
                   },
                   child: SubstitutionCard(
                     originalName: s.originalName,
@@ -264,12 +296,14 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
             ],
             SectionHeader(
               title: 'Your Optimised Basket',
-              subtitle: '${result.optimisedBasket.length} items',
+              subtitle: '${_displayBasket.length} items',
             ),
-            ...result.optimisedBasket.asMap().entries.map((entry) {
-              final item = entry.value;
-              final wasSubstituted = result.substitutions
-                  .any((s) => s.substituteId == item.id);
+            ..._displayBasket.map((item) {
+              final wasSubstituted = result.substitutions.any(
+                (s) =>
+                    s.substituteId == item.id &&
+                    !_revertedIds.contains(s.originalId),
+              );
               return _buildOptimisedItemTile(item, wasSubstituted);
             }),
             if (result.insights.isNotEmpty) ...[
