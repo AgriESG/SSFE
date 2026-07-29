@@ -54,10 +54,12 @@ class ApiOptimisationResult {
 class ApiSupplyPressure {
   final Map<String, double> grainPressure;
   final Map<String, double> foodCategoryPressure;
+  final String dataVintage;
 
   ApiSupplyPressure({
     required this.grainPressure,
     required this.foodCategoryPressure,
+    this.dataVintage = '',
   });
 
   factory ApiSupplyPressure.fromJson(Map<String, dynamic> j) => ApiSupplyPressure(
@@ -67,6 +69,7 @@ class ApiSupplyPressure {
         foodCategoryPressure: (j['food_category_pressure'] as Map? ?? {}).map(
           (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
         ),
+        dataVintage: (j['data_vintage'] ?? '').toString(),
       );
 }
 

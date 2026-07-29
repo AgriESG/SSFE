@@ -52,6 +52,22 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
   double get _nutritionGain => _comp.nutritionGain;       // score pts gained
   double get _basketGain   => _comp.basketScoreGain;      // composite pts
 
+  // Average supply stability across the swaps, expressed 0-1.
+  // Every substitution carries a supply_stability field from the SPI
+  // pipeline; the mean is the headline supply-resilience figure.
+  double get _avgSupplyStability {
+    final subs = widget.result.substitutions;
+    if (subs.isEmpty) return 0;
+    final total = subs.fold<double>(0, (sum, s) => sum + s.supplyStability);
+    return total / subs.length;
+  }
+
+  bool get _hasSupplyData {
+    final sp = widget.result.supplyPressure;
+    if (sp == null) return false;
+    return sp.grainPressure.isNotEmpty || sp.foodCategoryPressure.isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,9 +91,20 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
             children: [
               _buildHeroSavings(),
               const SizedBox(height: 24),
+              // Supply intelligence sits directly under the hero, before
+              // the conventional cost/carbon/nutrition breakdown, because
+              // it is the distinguishing dimension of the product.
+              if (_hasSupplyData) ...[
+                const SectionHeader(
+                  title: 'UK Supply Intelligence',
+                  subtitle: 'Why these swaps hold up against supply pressure',
+                ),
+                _buildSupplyIntelligence(),
+                const SizedBox(height: 24),
+              ],
               const SectionHeader(
                 title: 'Your Improvement Breakdown',
-                subtitle: 'Score changes across all three dimensions',
+                subtitle: 'Score changes across every dimension',
               ),
               _buildImprovementGrid(),
               const SizedBox(height: 24),
@@ -90,7 +117,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
               if (widget.result.substitutions.isNotEmpty) ...[
                 const SectionHeader(
                   title: 'Top Substitutions',
-                  subtitle: 'Your most impactful swaps',
+                  subtitle: 'Ranked by the supply-aware optimiser',
                 ),
                 ...widget.result.substitutions.take(3).map(
                   (s) => GestureDetector(
@@ -196,18 +223,26 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                 'Carbon\nReduction',
                 '🌍',
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               _heroMetric(
                 '${_costReduction.toStringAsFixed(0)}pts',
                 'Cost\nImprovement',
                 '💰',
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               _heroMetric(
                 '+${_nutritionGain.toStringAsFixed(0)}pts',
                 'Nutrition\nGain',
                 '💪',
               ),
+              if (widget.result.substitutions.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                _heroMetric(
+                  '${(_avgSupplyStability * 100).toStringAsFixed(0)}%',
+                  'Supply\nStability',
+                  '🌾',
+                ),
+              ],
             ],
           ),
         ],
@@ -218,7 +253,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
   Widget _heroMetric(String value, String label, String emoji) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(14),
@@ -230,7 +265,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
             Text(
               value,
               style: const TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,
               ),
@@ -240,13 +275,153 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9,
                 color: Colors.white.withValues(alpha: 0.8),
                 height: 1.2,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // UK Supply Intelligence — the distinguishing section. Surfaces the
+  // Supply Pressure Index that feeds the optimiser: how tight current UK
+  // supply is for the relevant grains and food categories, and the average
+  // stability of the chosen swaps. All values come straight from the API's
+  // supply_pressure_index and per-swap supply_stability fields.
+  // ---------------------------------------------------------------------------
+
+  Widget _buildSupplyIntelligence() {
+    final sp = widget.result.supplyPressure!;
+
+    // Combine grain and category pressures, keep the tightest few to show.
+    final entries = <MapEntry<String, double>>[
+      ...sp.grainPressure.entries,
+      ...sp.foodCategoryPressure.entries,
+    ]..sort((a, b) => b.value.compareTo(a.value)); // highest pressure first
+
+    final topPressures = entries.take(4).toList();
+    final swaps = widget.result.substitutions.length;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: HugeIcon(
+                  icon: HugeIcons.strokeRoundedAnalytics01,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  swaps > 0
+                      ? 'Your swaps favour foods with steadier UK supply. Average supply stability across your $swaps ${swaps == 1 ? "swap" : "swaps"}: ${(_avgSupplyStability * 100).toStringAsFixed(0)}%.'
+                      : 'Live UK supply conditions, read from 25 years of AHDB balance-sheet data.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Current supply pressure',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...topPressures.map((e) => _supplyPressureRow(e.key, e.value)),
+          const SizedBox(height: 6),
+          Text(
+            'Higher bars mean tighter current supply. The optimiser steers '
+            'towards categories under less pressure. Data vintage ${sp.dataVintage}.',
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textTertiary,
+              fontStyle: FontStyle.italic,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _supplyPressureRow(String label, double value) {
+    final Color color = value > 0.7
+        ? AppColors.error
+        : (value > 0.4 ? AppColors.warning : AppColors.success);
+    final display = label.isEmpty
+        ? label
+        : '${label[0].toUpperCase()}${label.substring(1)}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 78,
+            child: Text(
+              display,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: value.clamp(0.0, 1.0),
+                minHeight: 7,
+                backgroundColor: color.withValues(alpha: 0.12),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 34,
+            child: Text(
+              '${(value * 100).toStringAsFixed(0)}%',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -328,7 +503,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
             '💰',
             'Cost impact',
             '${costWeekly.toStringAsFixed(0)} pts cheaper per week',
-            'Aldi prices factored in across ${swaps} swaps',
+            'Aldi prices factored in across $swaps swaps',
           ),
           const Divider(height: 20, color: AppColors.divider),
           _projectionRow(
@@ -337,6 +512,15 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
             '+${_nutritionGain.toStringAsFixed(0)} pts per week',
             'Better protein and fibre balance maintained',
           ),
+          if (widget.result.substitutions.isNotEmpty) ...[
+            const Divider(height: 20, color: AppColors.divider),
+            _projectionRow(
+              '🌾',
+              'Supply resilience',
+              '${(_avgSupplyStability * 100).toStringAsFixed(0)}% average stability',
+              'Swaps weighted towards steadier UK supply',
+            ),
+          ],
         ],
       ),
     );
@@ -630,7 +814,9 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
     if (lower.contains('egg')) return '🥚';
     if (lower.contains('lentil') ||
         lower.contains('bean') ||
-        lower.contains('chickpea')) return '🫘';
+        lower.contains('chickpea')) {
+      return '🫘';
+    }
     if (lower.contains('tofu')) return '🫘';
     if (lower.contains('bread')) return '🍞';
     if (lower.contains('rice')) return '🍚';
