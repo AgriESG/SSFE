@@ -19,6 +19,31 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
+  // ---------------------------------------------------------------------------
+  // Display thresholds.
+  //
+  // Score deltas below _noiseBand are not movement, they are rounding. Anything
+  // inside the band is reported as "no change" rather than being rounded to zero
+  // and then labelled as an improvement, which is what produced "+0 pts /
+  // Improved" in earlier builds.
+  // ---------------------------------------------------------------------------
+  static const double _noiseBand = 0.5;
+
+  // The celebratory headline needs a clearly positive composite result, not a
+  // marginal one, so it uses a wider band than the individual cards.
+  static const double _headlineBand = 1.0;
+
+  // The SPI pipeline returns exactly 0.500 for commodities with no free stock
+  // series published in the AHDB balance sheets (oats is the standing example).
+  // That is a missing value, not a measured neutral reading, and it is rendered
+  // as such.
+  static const double _neutralPressure = 0.5;
+  static const double _neutralEpsilon = 0.001;
+
+  // Average supply stability at or above this reads as a genuine tilt towards
+  // steadier supply. Below it, the figure is reported without the claim.
+  static const double _supplyClaimThreshold = 0.60;
+
   @override
   void initState() {
     super.initState();
@@ -43,10 +68,40 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  // ---------------------------------------------------------------------------
+  // Formatting helpers.
+  //
+  // _fmtDelta applies the sign exactly once. Never concatenate a '+' or '-' onto
+  // its output; that is what produced "+-1pts".
+  // ---------------------------------------------------------------------------
+
+  String _fmtDelta(double v) {
+    if (v.abs() < _noiseBand) return '0';
+    return '${v > 0 ? '+' : '-'}${v.abs().toStringAsFixed(0)}';
+  }
+
+  /// Status word chosen by the sign of the delta, so a card can never label a
+  /// regression as an improvement.
+  String _statusFor(double v, {required String up, required String down}) {
+    if (v.abs() < _noiseBand) return 'No change';
+    return v > 0 ? up : down;
+  }
+
+  bool _isGood(double v) => v >= _noiseBand;
+
+  bool _isNoData(double pressure) =>
+      (pressure - _neutralPressure).abs() < _neutralEpsilon;
+
+  String _titleCase(String raw) {
+    final cleaned = raw.replaceAll('_', ' ').trim();
+    if (cleaned.isEmpty) return cleaned;
+    return '${cleaned[0].toUpperCase()}${cleaned.substring(1)}';
+  }
+
   // Convenience getters — map API score deltas to display values
   ApiBasketComparison get _comp => widget.result.comparison;
 
-  // env and cost: higher delta = bigger improvement (scores are 0-100)
+  // env and cost: positive delta = improvement (scores are 0-100, lower better)
   double get _envReduction => _comp.envReduction;         // score pts saved
   double get _costReduction => _comp.costReduction;       // score pts saved
   double get _nutritionGain => _comp.nutritionGain;       // score pts gained
@@ -66,6 +121,22 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
     final sp = widget.result.supplyPressure;
     if (sp == null) return false;
     return sp.grainPressure.isNotEmpty || sp.foodCategoryPressure.isNotEmpty;
+  }
+
+  String get _heroHeadline {
+    if (_basketGain >= _headlineBand) return 'Great Choices!';
+    if (_basketGain <= -_headlineBand) return 'Mixed Result';
+    return 'Broadly Even';
+  }
+
+  String get _heroSubtitle {
+    if (_basketGain >= _headlineBand) {
+      return "Here's how your optimised basket compares";
+    }
+    if (_basketGain <= -_headlineBand) {
+      return 'Some dimensions improved, others gave ground';
+    }
+    return 'Your optimised basket scores about the same overall';
   }
 
   @override
@@ -145,7 +216,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                 ),
                 const SizedBox(height: 24),
               ],
-              if (widget.result.insights.isNotEmpty) ...[
+              if (_visibleInsights.isNotEmpty) ...[
                 const SectionHeader(title: 'Sustainability Insights'),
                 ..._buildInsights(),
                 const SizedBox(height: 24),
@@ -196,12 +267,15 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
               color: Colors.white.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: const Text('🏆', style: TextStyle(fontSize: 36)),
+            child: Text(
+              _basketGain >= _headlineBand ? '🏆' : '📊',
+              style: const TextStyle(fontSize: 36),
+            ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Great Choices!',
-            style: TextStyle(
+          Text(
+            _heroHeadline,
+            style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -209,7 +283,8 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            "Here's how your optimised basket compares",
+            _heroSubtitle,
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
               color: Colors.white.withValues(alpha: 0.8),
@@ -219,20 +294,20 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
           Row(
             children: [
               _heroMetric(
-                '${_envReduction.toStringAsFixed(0)}pts',
+                '${_fmtDelta(_envReduction)}pts',
                 'Carbon\nReduction',
                 '🌍',
               ),
               const SizedBox(width: 8),
               _heroMetric(
-                '${_costReduction.toStringAsFixed(0)}pts',
-                'Cost\nImprovement',
+                '${_fmtDelta(_costReduction)}pts',
+                'Cost\nChange',
                 '💰',
               ),
               const SizedBox(width: 8),
               _heroMetric(
-                '+${_nutritionGain.toStringAsFixed(0)}pts',
-                'Nutrition\nGain',
+                '${_fmtDelta(_nutritionGain)}pts',
+                'Nutrition\nChange',
                 '💪',
               ),
               if (widget.result.substitutions.isNotEmpty) ...[
@@ -292,19 +367,48 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
   // supply is for the relevant grains and food categories, and the average
   // stability of the chosen swaps. All values come straight from the API's
   // supply_pressure_index and per-swap supply_stability fields.
+  //
+  // Commodities with no published free stock series return exactly 0.500 from
+  // the pipeline. Those are shown as "No data" rather than as a mid-range
+  // pressure reading, so the chart never presents an absent series as a
+  // measurement.
   // ---------------------------------------------------------------------------
 
   Widget _buildSupplyIntelligence() {
     final sp = widget.result.supplyPressure!;
 
     // Combine grain and category pressures, keep the tightest few to show.
+    // Rows with real readings sort ahead of no-data rows, so the visible
+    // selection is not crowded out by placeholders.
     final entries = <MapEntry<String, double>>[
       ...sp.grainPressure.entries,
       ...sp.foodCategoryPressure.entries,
-    ]..sort((a, b) => b.value.compareTo(a.value)); // highest pressure first
+    ]..sort((a, b) {
+        final aNoData = _isNoData(a.value);
+        final bNoData = _isNoData(b.value);
+        if (aNoData != bNoData) return aNoData ? 1 : -1;
+        return b.value.compareTo(a.value); // highest pressure first
+      });
 
     final topPressures = entries.take(4).toList();
+    final hasNoDataRow = topPressures.any((e) => _isNoData(e.value));
     final swaps = widget.result.substitutions.length;
+    final avgPct = (_avgSupplyStability * 100).toStringAsFixed(0);
+
+    final String summaryLine;
+    if (swaps == 0) {
+      summaryLine =
+          'Live UK supply conditions, read from 25 years of AHDB balance-sheet data.';
+    } else if (_avgSupplyStability >= _supplyClaimThreshold) {
+      summaryLine =
+          'Your swaps favour foods with steadier UK supply. Average supply '
+          'stability across your $swaps ${swaps == 1 ? "swap" : "swaps"}: $avgPct%.';
+    } else {
+      summaryLine =
+          'Average supply stability across your $swaps '
+          '${swaps == 1 ? "swap" : "swaps"}: $avgPct%. Higher means steadier '
+          'UK supply behind the foods you are moving to.';
+    }
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -333,9 +437,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  swaps > 0
-                      ? 'Your swaps favour foods with steadier UK supply. Average supply stability across your $swaps ${swaps == 1 ? "swap" : "swaps"}: ${(_avgSupplyStability * 100).toStringAsFixed(0)}%.'
-                      : 'Live UK supply conditions, read from 25 years of AHDB balance-sheet data.',
+                  summaryLine,
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textPrimary,
@@ -369,18 +471,33 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
               height: 1.4,
             ),
           ),
+          if (hasNoDataRow) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'No data: the AHDB balance sheets publish no free stock series '
+              'for this commodity, so the optimiser treats it neutrally rather '
+              'than penalising it.',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textTertiary,
+                fontStyle: FontStyle.italic,
+                height: 1.4,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _supplyPressureRow(String label, double value) {
-    final Color color = value > 0.7
-        ? AppColors.error
-        : (value > 0.4 ? AppColors.warning : AppColors.success);
-    final display = label.isEmpty
-        ? label
-        : '${label[0].toUpperCase()}${label.substring(1)}';
+    final noData = _isNoData(value);
+
+    final Color color = noData
+        ? AppColors.textTertiary
+        : (value > 0.7
+            ? AppColors.error
+            : (value > 0.4 ? AppColors.warning : AppColors.success));
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -389,11 +506,11 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
           SizedBox(
             width: 78,
             child: Text(
-              display,
-              style: const TextStyle(
+              _titleCase(label),
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: noData ? AppColors.textTertiary : AppColors.textPrimary,
               ),
             ),
           ),
@@ -401,7 +518,9 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
-                value: value.clamp(0.0, 1.0),
+                // A missing series has no magnitude, so the bar reads empty
+                // rather than sitting at the halfway mark.
+                value: noData ? 0.0 : value.clamp(0.0, 1.0),
                 minHeight: 7,
                 backgroundColor: color.withValues(alpha: 0.12),
                 valueColor: AlwaysStoppedAnimation<Color>(color),
@@ -410,13 +529,14 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
           ),
           const SizedBox(width: 10),
           SizedBox(
-            width: 34,
+            width: 52,
             child: Text(
-              '${(value * 100).toStringAsFixed(0)}%',
+              noData ? 'No data' : '${(value * 100).toStringAsFixed(0)}%',
               textAlign: TextAlign.right,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontSize: noData ? 10 : 12,
+                fontWeight: noData ? FontWeight.w600 : FontWeight.w700,
+                fontStyle: noData ? FontStyle.italic : FontStyle.normal,
                 color: color,
               ),
             ),
@@ -437,49 +557,51 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
       children: [
         MetricCard(
           label: 'Environmental',
-          value: _envReduction.toStringAsFixed(0),
+          value: _fmtDelta(_envReduction),
           unit: 'pts',
           hugeIcon: HugeIcons.strokeRoundedCloud,
           color: AppColors.carbonColor,
-          changeText: _envReduction > 0 ? 'Improved' : 'No change',
-          isPositive: _envReduction > 0,
+          changeText: _statusFor(_envReduction, up: 'Improved', down: 'Worse'),
+          isPositive: _isGood(_envReduction),
         ),
         MetricCard(
           label: 'Cost Score',
-          value: _costReduction.toStringAsFixed(0),
+          value: _fmtDelta(_costReduction),
           unit: 'pts',
           hugeIcon: HugeIcons.strokeRoundedPiggyBank,
           color: AppColors.costColor,
-          changeText: _costReduction > 0 ? 'Cheaper' : 'Similar',
-          isPositive: _costReduction > 0,
+          changeText: _statusFor(_costReduction, up: 'Cheaper', down: 'Pricier'),
+          isPositive: _isGood(_costReduction),
         ),
         MetricCard(
           label: 'Nutrition',
-          value: '+${_nutritionGain.toStringAsFixed(0)}',
+          value: _fmtDelta(_nutritionGain),
           unit: 'pts',
           hugeIcon: HugeIcons.strokeRoundedOrganicFood,
           color: AppColors.nutritionColor,
-          changeText: _nutritionGain > 0 ? 'Improved' : 'Maintained',
-          isPositive: _nutritionGain >= 0,
+          changeText:
+              _statusFor(_nutritionGain, up: 'Improved', down: 'Reduced'),
+          isPositive: _isGood(_nutritionGain),
         ),
         MetricCard(
           label: 'Overall Score',
-          value: _basketGain.toStringAsFixed(0),
+          value: _fmtDelta(_basketGain),
           unit: 'pts',
           hugeIcon: HugeIcons.strokeRoundedAnalyticsUp,
           color: AppColors.success,
-          changeText: '${widget.result.substitutions.length} swaps',
-          isPositive: _basketGain > 0,
+          changeText:
+              '${widget.result.substitutions.length} supply-ranked swaps',
+          isPositive: _isGood(_basketGain),
         ),
       ],
     );
   }
 
   Widget _buildAnnualProjections() {
-    // Project score improvements into weekly/yearly narrative
+    // Project score movements into a weekly narrative. Direction words are
+    // derived from the sign, never assumed, so a basket that got more expensive
+    // is not described as cheaper.
     final swaps = widget.result.substitutions.length;
-    final envWeekly = _envReduction;
-    final costWeekly = _costReduction;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -495,22 +617,27 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
           _projectionRow(
             '🌍',
             'Carbon impact',
-            '${envWeekly.toStringAsFixed(0)} pts better per week',
-            'Consistent swaps compound over time',
+            _weeklyLine(_envReduction, better: 'better', worse: 'worse'),
+            _envReduction.abs() < _noiseBand
+                ? 'Carbon load is broadly unchanged by these swaps'
+                : 'Consistent swaps compound over time',
           ),
           const Divider(height: 20, color: AppColors.divider),
           _projectionRow(
             '💰',
             'Cost impact',
-            '${costWeekly.toStringAsFixed(0)} pts cheaper per week',
-            'Aldi prices factored in across $swaps swaps',
+            _weeklyLine(_costReduction,
+                better: 'cheaper', worse: 'more expensive'),
+            'Aldi prices factored in across $swaps ${swaps == 1 ? "swap" : "swaps"}',
           ),
           const Divider(height: 20, color: AppColors.divider),
           _projectionRow(
             '💪',
             'Nutrition impact',
-            '+${_nutritionGain.toStringAsFixed(0)} pts per week',
-            'Better protein and fibre balance maintained',
+            _weeklyLine(_nutritionGain, better: 'better', worse: 'weaker'),
+            _nutritionGain.abs() < _noiseBand
+                ? 'Protein and fibre balance holds steady'
+                : 'Driven by protein and fibre density in the new items',
           ),
           if (widget.result.substitutions.isNotEmpty) ...[
             const Divider(height: 20, color: AppColors.divider),
@@ -518,7 +645,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
               '🌾',
               'Supply resilience',
               '${(_avgSupplyStability * 100).toStringAsFixed(0)}% average stability',
-              'Swaps weighted towards steadier UK supply',
+              'Supply stability carries a fixed 0.15 weight in every ranking',
             ),
           ],
         ],
@@ -526,56 +653,32 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
     );
   }
 
-  Widget _projectionRow(
-    String emoji,
-    String title,
-    String value,
-    String context,
-  ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 24)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                context,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textTertiary,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+  /// Builds a weekly projection line whose direction word follows the sign of
+  /// the delta, and which says nothing when the delta is inside the noise band.
+  String _weeklyLine(double delta, {required String better, required String worse}) {
+    if (delta.abs() < _noiseBand) return 'Broadly unchanged per week';
+    final magnitude = delta.abs().toStringAsFixed(0);
+    return '$magnitude pts ${delta > 0 ? better : worse} per week';
   }
 
+  // ---------------------------------------------------------------------------
+  // Insights.
+  //
+  // The API occasionally emits an insight for a dimension that did not actually
+  // move ("Nutrition score up 0 pts"). Those assert a benefit the number does
+  // not support, so they are dropped rather than displayed. The real fix is on
+  // the backend generator; this is the client-side guard.
+  // ---------------------------------------------------------------------------
+
+  static final RegExp _zeroChangeInsight =
+      RegExp(r'\b(?:by|up|down)\s+0(?:\.0+)?\s*pts?\b', caseSensitive: false);
+
+  List<String> get _visibleInsights => widget.result.insights
+      .where((i) => !_zeroChangeInsight.hasMatch(i))
+      .toList();
+
   List<Widget> _buildInsights() {
-    return widget.result.insights.map((insight) {
+    return _visibleInsights.map((insight) {
       return Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
@@ -692,8 +795,8 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
       child: Column(
         children: [
           Row(
-            children: [
-              const Expanded(
+            children: const [
+              Expanded(
                 flex: 2,
                 child: Text(
                   'Metric',
@@ -708,7 +811,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                 child: Text(
                   'Before',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textTertiary,
@@ -719,10 +822,10 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                 child: Text(
                   'After',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.success,
+                    color: AppColors.textTertiary,
                   ),
                 ),
               ),
@@ -808,9 +911,11 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
     final lower = name.toLowerCase();
     if (lower.contains('chicken')) return '🍗';
     if (lower.contains('beef')) return '🥩';
+    if (lower.contains('pork')) return '🥓';
     if (lower.contains('salmon') || lower.contains('tuna')) return '🐟';
     if (lower.contains('milk')) return '🥛';
     if (lower.contains('yoghurt') || lower.contains('yogurt')) return '🥄';
+    if (lower.contains('cheese')) return '🧀';
     if (lower.contains('egg')) return '🥚';
     if (lower.contains('lentil') ||
         lower.contains('bean') ||
@@ -819,13 +924,16 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
     }
     if (lower.contains('tofu')) return '🫘';
     if (lower.contains('bread')) return '🍞';
+    if (lower.contains('flour')) return '🌾';
     if (lower.contains('rice')) return '🍚';
     if (lower.contains('oat')) return '🥣';
+    if (lower.contains('maize') || lower.contains('corn')) return '🌽';
     if (lower.contains('apple')) return '🍎';
     if (lower.contains('banana')) return '🍌';
     if (lower.contains('broccoli')) return '🥦';
+    if (lower.contains('sprout')) return '🥬';
     if (lower.contains('carrot')) return '🥕';
-    if (lower.contains('spinach')) return '🥬';
+    if (lower.contains('spinach') || lower.contains('lettuce')) return '🥬';
     return '🍽️';
   }
 }

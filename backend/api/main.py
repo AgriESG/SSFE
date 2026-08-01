@@ -1,11 +1,35 @@
 """
 AgriESG — FastAPI Backend
 Food Optimisation Engine API
-Version: 0.3.0
+Version: 0.3.1
+
+WHAT CHANGED FROM 0.3.0:
+--------------------------
+Rationale generation is now supply-aware.
+
+  Previously the rationale sentence was built only from cost, nutrition
+  and environment deltas. supply_stability was computed and returned in
+  the response but never referenced in the text, so no individual
+  recommendation ever attributed itself to the Supply Pressure Index
+  even when the index had influenced the ranking.
+
+  The generator now:
+    - appends a supply clause when the substitute's category sits under
+      genuinely less supply pressure than the original's, printing both
+      figures so they can be reconciled against supply_stability in the
+      same response
+    - suppresses that clause when either category sits on the neutral
+      0.500 default, which indicates no published free stock series
+      rather than a measured mid-range reading
+    - names trade-offs, since Pareto optimality means undominated rather
+      than better on every objective
+    - applies a consistent >= 2 pt threshold across all three score
+      dimensions (nutrition previously used > 0, which surfaced
+      "better nutrition (+1 pts)" on essentially flat swaps)
 
 WHAT CHANGED FROM 0.2.0:
 --------------------------
-The /optimise-basket endpoint now runs a three-stage pipeline:
+The /optimise-basket endpoint runs a three-stage pipeline:
 
   Stage 1 — Behavioural Realism Filter
   Removes substitution candidates that are behaviourally unrealistic
@@ -40,14 +64,16 @@ from services.data_loader import load_food_data
 from engines.supply_pressure import get_supply_pressure_index
 from engines.pareto_optimiser import optimise_substitutions
 from engines.behavioural_realism import filter_by_realism
-from api.metrics import RequestCounterMiddleware, router as metrics_router, _pipeline# ---------------------------------------------------------------------------
+from api.metrics import RequestCounterMiddleware, router as metrics_router, _pipeline
+
+# ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="AgriESG Food Optimisation API",
     description="Multi-objective food basket optimisation: cost, nutrition, environment, supply stability.",
-    version="0.3.0",
+    version="0.3.1",
 )
 
 app.add_middleware(
@@ -58,6 +84,7 @@ app.add_middleware(
 )
 app.add_middleware(RequestCounterMiddleware)
 app.include_router(metrics_router)
+
 # ---------------------------------------------------------------------------
 # Role normalisation
 # Collapses inconsistent Role column values into functional roles
@@ -83,6 +110,29 @@ ROLE_MAP = {
 # 1 = low realism (stretch swap, unlikely for most users)
 # Only swaps with realism >= MIN_SWAP_REALISM are used
 MIN_SWAP_REALISM = 1
+
+# ---------------------------------------------------------------------------
+# Rationale generation thresholds
+# ---------------------------------------------------------------------------
+
+# Score movements smaller than this are rounding, not movement. Applied
+# uniformly across env, cost and nutrition so no single dimension can claim
+# a benefit at a magnitude the others would ignore.
+SCORE_CLAIM_THRESHOLD = 2.0
+
+# A supply stability gain must clear this before the rationale claims one.
+SUPPLY_CLAIM_THRESHOLD = 0.05
+
+# The Supply Pressure Index returns exactly 0.500 for commodities with no
+# free stock series published in the AHDB balance sheets. That value marks
+# absent data, not a measured neutral reading, and must never be presented
+# as evidence of a supply benefit.
+NEUTRAL_PRESSURE = 0.5
+NEUTRAL_EPSILON = 1e-3
+
+# Tolerance when reconciling a locally derived stability figure against the
+# supply_stability value returned by the optimiser.
+SUPPLY_RECONCILE_TOLERANCE = 0.02
 
 
 def normalise_role(raw: str) -> str:
@@ -208,6 +258,127 @@ def sanitise(val):
 
 
 # ---------------------------------------------------------------------------
+# Supply stability helpers
+#
+# Both the rationale generator and any future consumer need one shared
+# definition of "how stable is this category", so it lives here rather than
+# being derived inline at the call site.
+# ---------------------------------------------------------------------------
+
+def category_stability(category: Optional[str]) -> Optional[float]:
+    """
+    Stability of a food category, derived from its supply pressure.
+
+    Returns None when the category is unknown, or when its pressure sits on
+    the neutral 0.500 default. That default marks a commodity with no free
+    stock series in the AHDB balance sheets, so it carries no information
+    about supply conditions and must not be read as a mid-range measurement.
+    """
+    if not category:
+        return None
+    cat_pressure = _supply_pressure.get("food_category_pressure", {})
+    p = cat_pressure.get(category)
+    if p is None:
+        return None
+    try:
+        p = float(p)
+    except (TypeError, ValueError):
+        return None
+    if abs(p - NEUTRAL_PRESSURE) < NEUTRAL_EPSILON:
+        return None
+    return round(1.0 - p, 3)
+
+
+def build_supply_clause(
+    orig_category: Optional[str],
+    sub_category: Optional[str],
+    sub_stability: Optional[float],
+) -> Optional[str]:
+    """
+    Build the supply clause for a rationale sentence, or None if no honest
+    claim can be made.
+
+    The clause is emitted only when all of the following hold:
+      - both categories have real (non-default) pressure readings
+      - the substitute's stability reconciles with the supply_stability
+        value returned by the optimiser, so the two numbers a reader can
+        see in the same API response agree with each other
+      - the stability gain clears SUPPLY_CLAIM_THRESHOLD
+
+    The reconciliation check exists because this function derives stability
+    as 1 - pressure. If the optimiser ever derives it differently, printing
+    a figure here that contradicts the response field would be worse than
+    printing nothing, so the clause is suppressed instead.
+    """
+    if sub_stability is None:
+        return None
+
+    orig_stability = category_stability(orig_category)
+    if orig_stability is None:
+        return None
+
+    expected = category_stability(sub_category)
+    if expected is None:
+        return None
+
+    if abs(expected - float(sub_stability)) > SUPPLY_RECONCILE_TOLERANCE:
+        return None
+
+    gain = float(sub_stability) - orig_stability
+    if gain < SUPPLY_CLAIM_THRESHOLD:
+        return None
+
+    return (
+        f"steadier UK supply ({float(sub_stability):.2f} vs {orig_stability:.2f})"
+    )
+
+
+def build_rationale(
+    env_d: float,
+    cost_d: float,
+    nut_d: float,
+    supply_clause: Optional[str],
+) -> str:
+    """
+    Compose the human-readable rationale.
+
+    Benefits and trade-offs are both reported. A Pareto-optimal swap is
+    undominated, not better on every objective, so a recommendation can
+    legitimately give ground on one dimension. Stating that is what
+    separates a recommendation from a sales pitch, and it is checkable
+    against the delta fields in the same response.
+    """
+    parts = []
+    if env_d >= SCORE_CLAIM_THRESHOLD:
+        parts.append(f"lower environmental impact (-{env_d:.0f} pts)")
+    if cost_d >= SCORE_CLAIM_THRESHOLD:
+        parts.append(f"cheaper (-{cost_d:.0f} cost pts)")
+    if nut_d >= SCORE_CLAIM_THRESHOLD:
+        parts.append(f"better nutrition (+{nut_d:.0f} pts)")
+    if supply_clause:
+        parts.append(supply_clause)
+
+    tradeoffs = []
+    if env_d <= -SCORE_CLAIM_THRESHOLD:
+        tradeoffs.append(f"higher carbon (+{abs(env_d):.0f} pts)")
+    if cost_d <= -SCORE_CLAIM_THRESHOLD:
+        tradeoffs.append(f"pricier (+{abs(cost_d):.0f} cost pts)")
+    if nut_d <= -SCORE_CLAIM_THRESHOLD:
+        tradeoffs.append(f"less nutrient dense ({nut_d:.0f} pts)")
+
+    if parts:
+        rationale = "Swap for " + ", ".join(parts) + "."
+        if tradeoffs:
+            rationale += " Trade-off: " + ", ".join(tradeoffs) + "."
+        return rationale
+
+    if tradeoffs:
+        return "Ranked on balance despite " + ", ".join(tradeoffs) + "."
+
+    return "Marginal combined improvement."
+
+
+# ---------------------------------------------------------------------------
 # Scoring helpers
 # ---------------------------------------------------------------------------
 
@@ -266,7 +437,7 @@ class FoodSearchRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "AgriESG Food Optimisation API", "version": "0.3.0"}
+    return {"message": "AgriESG Food Optimisation API", "version": "0.3.1"}
 
 
 @app.get("/health")
@@ -417,6 +588,7 @@ def optimise_basket(request: BasketRequest):
             continue
 
         orig_scores = score_food_row(orig_row, orig_price)
+        orig_supply_category = get_supply_category(orig_row)
 
         # Get substitution candidates from dataset
         # Filter by minimum swap realism from Ifeanyi's audit
@@ -501,16 +673,21 @@ def optimise_basket(request: BasketRequest):
         best_sub_id = best["substitute_id"]
         optimised_ids[i] = best_sub_id
 
-        # Generate human-readable rationale
+        # ── Generate human-readable rationale ───────────────────────────────
+        # Supply is one of the four ranked objectives, so it appears in the
+        # sentence whenever it genuinely applies, with both figures shown so
+        # they reconcile against supply_stability in this same response.
         env_d  = best.get("env_delta", 0)
         cost_d = best.get("cost_delta", 0)
         nut_d  = best.get("nutrition_delta", 0)
 
-        parts = []
-        if env_d  >= 2: parts.append(f"lower environmental impact (-{env_d:.0f} pts)")
-        if cost_d >= 2: parts.append(f"cheaper (-{cost_d:.0f} cost pts)")
-        if nut_d  >  0: parts.append(f"better nutrition (+{nut_d:.0f} pts)")
-        rationale = ("Swap for " + ", ".join(parts) + ".") if parts else "Marginal combined improvement."
+        supply_clause = build_supply_clause(
+            orig_category=orig_supply_category,
+            sub_category=best.get("food_category"),
+            sub_stability=best.get("supply_stability"),
+        )
+
+        rationale = build_rationale(env_d, cost_d, nut_d, supply_clause)
 
         # ── Build substitution response ─────────────────────────────────────
         # Backward compatible fields preserved from v0.2.0
@@ -537,6 +714,12 @@ def optimise_basket(request: BasketRequest):
             "weights_applied":     result.get("weights_applied", {}),
             "is_pareto_optimal":   True,
             "human_flagged_low_realism": bool(best.get("human_flagged_low_realism", False)),
+            # ── v0.3.1 new fields ──
+            # Both supply categories exposed so a reader can trace the
+            # rationale's supply clause back to /supply-pressure directly.
+            "original_supply_category":   orig_supply_category,
+            "substitute_supply_category": best.get("food_category"),
+            "supply_influenced_rationale": supply_clause is not None,
         }
 
         substitutions.append(sub_entry)
@@ -566,7 +749,14 @@ def optimise_basket(request: BasketRequest):
             "food_category_pressure": _supply_pressure.get("food_category_pressure", {}),
             "data_vintage":          _supply_pressure.get("data_vintage"),
         },
-        "engine_version": "0.3.0",
+        # ── v0.3.1 new field ──
+        # How many of the returned swaps carry a supply clause in their
+        # rationale. Exposed rather than inferred so the influence of the
+        # Supply Pressure Index on this basket is directly countable.
+        "supply_influenced_count": sum(
+            1 for s in substitutions if s.get("supply_influenced_rationale")
+        ),
+        "engine_version": "0.3.1",
     }
 
 
@@ -604,11 +794,28 @@ def supply_pressure():
     derived from AHDB UK cereal balance sheet data.
     """
     get_data()
+    cat_pressure = _supply_pressure.get("food_category_pressure", {}) or {}
+
+    # Categories sitting on the neutral default have no free stock series
+    # published in the balance sheets. Naming them explicitly keeps a reader
+    # from mistaking an absent series for a mid-range measurement.
+    no_data_categories = [
+        c for c, p in cat_pressure.items()
+        if isinstance(p, (int, float)) and abs(float(p) - NEUTRAL_PRESSURE) < NEUTRAL_EPSILON
+    ]
+
     return {
         "supply_pressure": _supply_pressure,
+        "neutral_default": NEUTRAL_PRESSURE,
+        "no_data_categories": no_data_categories,
         "description": "Supply pressure scores derived from AHDB UK cereal balance sheet data. "
-                       "Higher score = more supply pressure = greater price volatility risk.",
+                       "Higher score = more supply pressure = greater price volatility risk. "
+                       f"A score of exactly {NEUTRAL_PRESSURE} means no free stock series is "
+                       "published for that commodity, so it is treated neutrally rather than "
+                       "penalised.",
     }
+
+
 # ---------------------------------------------------------------------------
 # Swap feedback telemetry
 # Anonymous accept/dismiss counts — no user identifiers collected
