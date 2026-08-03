@@ -264,8 +264,19 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
       .where((s) => !_revertedIds.contains(s.originalId))
       .length;
 
-  bool get _anythingChanged =>
-      _costSaved.abs() >= _penceBand || _carbonSaved.abs() >= _carbonBand;
+  // Direction, not just movement. An earlier version asked only whether
+  // anything had changed, so a basket that came out worse on both axes still
+  // got a congratulatory green header over "11.7 kg more / £12.07 more".
+  bool get _costBetter => _costSaved >= _penceBand;
+  bool get _costWorse => _costSaved <= -_penceBand;
+  bool get _carbonBetter => _carbonSaved >= _carbonBand;
+  bool get _carbonWorse => _carbonSaved <= -_carbonBand;
+
+  bool get _anyBetter => _costBetter || _carbonBetter;
+  bool get _anyWorse => _costWorse || _carbonWorse;
+
+  /// Green is earned only when something improved and nothing went backwards.
+  bool get _isWin => _anyBetter && !_anyWorse;
 
   String get _costLine {
     if (_costSaved.abs() < _penceBand) return 'Same price';
@@ -312,8 +323,8 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
               SectionHeader(
                 title: 'Suggested Swaps',
                 subtitle: meaningful.length == 1
-                    ? 'One change worth making'
-                    : '${meaningful.length} changes worth making',
+                    ? 'One change to consider'
+                    : '${meaningful.length} changes to consider',
               ),
               ...meaningful.map(_buildSwapCard),
               const SizedBox(height: 20),
@@ -439,15 +450,25 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
   // Headline banner
   //
   // Reports pounds and kilograms, not score points, and only claims a win when
-  // the basket actually moved. A green celebration over "0pts / 0pts" tells the
-  // user the app is not paying attention.
+  // the basket actually improved. A green celebration over "0pts / 0pts", or
+  // over a basket that got more expensive, tells the user the app is not
+  // paying attention.
   // ---------------------------------------------------------------------------
 
   Widget _buildComparisonBanner() {
-    final changed = _anythingChanged;
-    final headline = _activeSwaps == 0
-        ? 'No changes made'
-        : (changed ? 'Your basket, improved' : 'Swapped, much the same');
+    final win = _isWin;
+    final String headline;
+    if (_activeSwaps == 0) {
+      headline = 'No changes made';
+    } else if (win) {
+      headline = 'Your basket, improved';
+    } else if (_anyBetter && _anyWorse) {
+      headline = 'Better in some ways, worse in others';
+    } else if (_anyWorse) {
+      headline = 'This basket costs you more';
+    } else {
+      headline = 'Swapped, much the same';
+    }
 
     return Container(
       width: double.infinity,
@@ -456,14 +477,14 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: changed
+          colors: win
               ? const [Color(0xFF52B788), Color(0xFF40916C)]
               : const [Color(0xFF6C8A7B), Color(0xFF52705F)],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppColors.success.withValues(alpha: changed ? 0.3 : 0.12),
+            color: AppColors.success.withValues(alpha: win ? 0.3 : 0.12),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -472,7 +493,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
       child: Column(
         children: [
           HugeIcon(
-            icon: changed
+            icon: win
                 ? HugeIcons.strokeRoundedMagicWand01
                 : HugeIcons.strokeRoundedAnalytics01,
             color: Colors.white,
