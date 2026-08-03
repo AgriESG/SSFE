@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
@@ -27,6 +29,28 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   bool _isLoading = true;
   String? _loadError;
 
+  // ---------------------------------------------------------------------------
+  // Cold-start handling.
+  //
+  // The API is hosted on a tier that spins down after a period of inactivity
+  // and takes the better part of a minute to wake. The first request after an
+  // idle period therefore fails while the service starts, and a single attempt
+  // shows the user an error for something that is about to work on its own.
+  //
+  // So: retry automatically with a widening gap before surfacing anything, and
+  // if the first attempt is slow, tell the user it is waking rather than
+  // leaving them watching a spinner with no explanation.
+  // ---------------------------------------------------------------------------
+  static const int _maxAttempts = 3;
+  static const List<Duration> _retryBackoff = [
+    Duration(seconds: 3),
+    Duration(seconds: 8),
+  ];
+  static const Duration _slowStartThreshold = Duration(seconds: 5);
+
+  bool _slowStart = false;
+  Timer? _slowStartTimer;
+
   String _searchQuery = '';
   String _selectedCategory = 'All';
   final TextEditingController _searchController = TextEditingController();
@@ -52,6 +76,7 @@ class _BasketInputScreenState extends State<BasketInputScreen>
 
   @override
   void dispose() {
+    _slowStartTimer?.cancel();
     _searchController.dispose();
     _pasteController.dispose();
     _animController.dispose();
@@ -63,23 +88,50 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   // ---------------------------------------------------------------------------
 
   Future<void> _loadFoods() async {
-    try {
-      final foods = await ApiService.getAllFoods();
-      final cats = ['All', ...{...foods.map((f) => f.category)}.toList()..sort()];
-      if (mounted) {
+    _slowStartTimer?.cancel();
+    _slowStartTimer = Timer(_slowStartThreshold, () {
+      if (mounted && _isLoading) {
+        setState(() => _slowStart = true);
+      }
+    });
+
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        final foods = await ApiService.getAllFoods();
+        final cats = [
+          'All',
+          ...{...foods.map((f) => f.category)}.toList()..sort(),
+        ];
+        _slowStartTimer?.cancel();
+        if (!mounted) return;
         setState(() {
           _allFoods = foods;
           _filteredFoods = foods;
           _categories = cats;
           _isLoading = false;
+          _slowStart = false;
+          _loadError = null;
         });
         _animController.forward();
-      }
-    } catch (e) {
-      if (mounted) {
+        return;
+      } catch (_) {
+        if (attempt < _maxAttempts) {
+          // Still worth waiting: the service may simply be starting up.
+          await Future.delayed(_retryBackoff[attempt - 1]);
+          if (!mounted) return;
+          continue;
+        }
+
+        // Out of attempts. Say what the user can do, not what our
+        // infrastructure is doing.
+        _slowStartTimer?.cancel();
+        if (!mounted) return;
         setState(() {
-          _loadError = 'Could not load food catalogue. Is the backend running?';
+          _loadError =
+              "We couldn't load your foods just now. Check your connection "
+              'and try again.';
           _isLoading = false;
+          _slowStart = false;
         });
       }
     }
@@ -146,6 +198,7 @@ class _BasketInputScreenState extends State<BasketInputScreen>
         .where((l) => l.isNotEmpty);
 
     int added = 0;
+    int unmatched = 0;
     for (final line in lines) {
       final lower = line.toLowerCase();
       final match = _allFoods.where(
@@ -154,20 +207,35 @@ class _BasketInputScreenState extends State<BasketInputScreen>
       if (match.isNotEmpty) {
         _addToBasket(match.first);
         added++;
+      } else {
+        unmatched++;
       }
     }
 
     setState(() => _showPasteMode = false);
     _pasteController.clear();
 
-    if (added > 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Added $added items to your basket'),
-          backgroundColor: AppColors.success,
-        ),
-      );
+    if (!mounted) return;
+
+    // Previously a list where nothing matched produced no feedback at all, so
+    // the screen simply closed and appeared to have done nothing.
+    final String message;
+    final Color background;
+    if (added == 0) {
+      message = "We couldn't match any of those to foods we know.";
+      background = AppColors.error;
+    } else if (unmatched > 0) {
+      message = 'Added $added ${added == 1 ? "item" : "items"}. '
+          '$unmatched not recognised.';
+      background = AppColors.success;
+    } else {
+      message = 'Added $added ${added == 1 ? "item" : "items"} to your basket';
+      background = AppColors.success;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: background),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -230,17 +298,34 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   }
 
   Widget _buildLoading() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text(
-            'Loading food catalogue...',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-        ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              _slowStart ? 'Still loading' : 'Loading your foods...',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (_slowStart) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'This can take up to a minute the first time.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -259,17 +344,18 @@ class _BasketInputScreenState extends State<BasketInputScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              _loadError ?? 'Unknown error',
+              _loadError ?? "Something went wrong. Please try again.",
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 24),
             AdaptiveButton(
-              label: 'Retry',
+              label: 'Try Again',
               onPressed: () {
                 setState(() {
                   _isLoading = true;
                   _loadError = null;
+                  _slowStart = false;
                 });
                 _loadFoods();
               },
@@ -361,17 +447,57 @@ class _BasketInputScreenState extends State<BasketInputScreen>
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _filteredFoods.length,
-            itemBuilder: (_, i) {
-              final item = _filteredFoods[i];
-              final inBasket = _basket.any((b) => b.id == item.id);
-              return _buildFoodItemTile(item, inBasket);
-            },
-          ),
+          child: _filteredFoods.isEmpty
+              ? _buildNoResults()
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _filteredFoods.length,
+                  itemBuilder: (_, i) {
+                    final item = _filteredFoods[i];
+                    final inBasket = _basket.any((b) => b.id == item.id);
+                    return _buildFoodItemTile(item, inBasket);
+                  },
+                ),
         ),
       ],
+    );
+  }
+
+  /// A search that matches nothing previously rendered a blank area with no
+  /// explanation, which reads as a broken screen rather than an empty result.
+  Widget _buildNoResults() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedSearch01,
+              color: AppColors.textTertiary,
+              size: 36,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _searchQuery.isNotEmpty
+                  ? 'No foods matching "$_searchQuery"'
+                  : 'Nothing in this category yet',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Try a different search or category.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -468,7 +594,6 @@ class _BasketInputScreenState extends State<BasketInputScreen>
 
   Widget _buildBasketSummary() {
     if (_basket.isEmpty) return _buildEmptyBasket();
-
 
     final totalCost = _basket.fold(0.0, (sum, i) => sum + i.totalPrice);
     final totalCarbon = _basket.fold(0.0, (sum, i) => sum + i.totalCarbon);

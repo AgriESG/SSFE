@@ -16,6 +16,24 @@ class ApiConfig {
 
   // For physical device on same Wi-Fi:
   // static const String baseUrl = 'http://192.168.x.x:8000';
+
+  // -------------------------------------------------------------------------
+  // Timeouts
+  //
+  // The API is hosted on a tier that spins down after a period of inactivity
+  // and takes roughly 30-50 seconds to wake. A 10-second timeout gives up
+  // before the server can possibly answer, so the first request after an idle
+  // period always failed and the user saw an error for something that was
+  // about to work.
+  //
+  // coldStart is used for the two calls that are likely to be first in a
+  // session. The rest use standard, since by the time they run the service is
+  // already awake.
+  // -------------------------------------------------------------------------
+  static const Duration coldStart = Duration(seconds: 60);
+  static const Duration standard = Duration(seconds: 30);
+  static const Duration probe = Duration(seconds: 5);
+  static const Duration telemetry = Duration(seconds: 5);
 }
 
 // ---------------------------------------------------------------------------
@@ -42,13 +60,57 @@ class ApiOptimisationResult {
   final List<String> insights;
   final ApiSupplyPressure? supplyPressure;
 
+  /// How many of the returned swaps carry a supply clause in their rationale.
+  /// Served by the API rather than inferred, so the influence of the Supply
+  /// Pressure Index on this basket is directly countable.
+  final int supplyInfluencedCount;
+
+  /// Feed cost pressure by category. Only categories with a completed
+  /// backtest appear; everything else is absent rather than defaulted.
+  final Map<String, ApiFeedCostPressure> feedCostPressure;
+
   ApiOptimisationResult({
     required this.optimisedBasket,
     required this.substitutions,
     required this.comparison,
     required this.insights,
     this.supplyPressure,
+    this.supplyInfluencedCount = 0,
+    this.feedCostPressure = const {},
   });
+}
+
+/// Feed cost pressure for one category. Validated for pork only — see
+/// data/validation/feed_lead_lag.md. The API omits untested categories, so
+/// the absence of a key here means "not measured", not "no pressure".
+class ApiFeedCostPressure {
+  final String category;
+  final double pressure;
+  final double stability;
+  final double pctChange13w;
+  final List<int> leadHorizonWeeks;
+  final String asOf;
+
+  ApiFeedCostPressure({
+    required this.category,
+    required this.pressure,
+    required this.stability,
+    required this.pctChange13w,
+    required this.leadHorizonWeeks,
+    required this.asOf,
+  });
+
+  factory ApiFeedCostPressure.fromJson(Map<String, dynamic> j) =>
+      ApiFeedCostPressure(
+        category: (j['category'] ?? '').toString(),
+        pressure: (j['pressure'] ?? 0).toDouble(),
+        stability: (j['stability'] ?? 0).toDouble(),
+        pctChange13w: (j['pct_change_13w'] ?? 0).toDouble(),
+        leadHorizonWeeks: (j['lead_horizon_weeks'] as List? ?? [])
+            .map((v) => (v ?? 0) as int)
+            .toList(),
+        asOf: (j['as_of'] ?? '').toString(),
+      );
 }
 
 class ApiSupplyPressure {
@@ -91,6 +153,16 @@ class ApiSubstitution {
   final Map<String, double> weightsApplied;
   final bool humanFlaggedLowRealism;
 
+  /// True when supply pressure actually contributed a clause to the rationale.
+  /// Lets the UI badge only the swaps where supply genuinely mattered, rather
+  /// than implying it influenced every recommendation.
+  final bool supplyInfluencedRationale;
+
+  /// Supply categories on each side, so a reader can trace the rationale's
+  /// supply clause back to the /supply-pressure endpoint.
+  final String originalSupplyCategory;
+  final String substituteSupplyCategory;
+
   ApiSubstitution({
     required this.originalId,
     required this.originalName,
@@ -108,7 +180,15 @@ class ApiSubstitution {
     required this.paretoFrontSize,
     required this.weightsApplied,
     required this.humanFlaggedLowRealism,
+    this.supplyInfluencedRationale = false,
+    this.originalSupplyCategory = '',
+    this.substituteSupplyCategory = '',
   });
+
+  /// The pipeline returns exactly 0.5 for foods with no published supply
+  /// series. That is absent data, not a mid-range reading, so the UI must not
+  /// render it as a measurement.
+  bool get hasSupplyData => (supplyStability - 0.5).abs() > 0.001;
 
   factory ApiSubstitution.fromJson(Map<String, dynamic> j) => ApiSubstitution(
         originalId: j['original_id'] ?? '',
@@ -129,6 +209,10 @@ class ApiSubstitution {
           (k, v) => MapEntry(k.toString(), (v ?? 0).toDouble()),
         ),
         humanFlaggedLowRealism: j['human_flagged_low_realism'] ?? false,
+        supplyInfluencedRationale: j['supply_influenced_rationale'] ?? false,
+        originalSupplyCategory: (j['original_supply_category'] ?? '').toString(),
+        substituteSupplyCategory:
+            (j['substitute_supply_category'] ?? '').toString(),
       );
 }
 
@@ -185,6 +269,11 @@ class ApiBasketComparison {
 class ApiService {
   static final _client = http.Client();
 
+  /// Score movements smaller than this are rounding, not movement. Used to
+  /// stop insights being generated for changes that round to zero, which
+  /// previously produced lines like "Nutrition score up 0 pts".
+  static const double _noiseBand = 0.5;
+
   static Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -198,7 +287,7 @@ class ApiService {
     try {
       final res = await _client
           .get(Uri.parse('${ApiConfig.baseUrl}/health'))
-          .timeout(const Duration(seconds: 5));
+          .timeout(ApiConfig.probe);
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -212,7 +301,7 @@ class ApiService {
   static Future<List<FoodItem>> getAllFoods() async {
     final res = await _client
         .get(Uri.parse('${ApiConfig.baseUrl}/foods'), headers: _headers)
-        .timeout(const Duration(seconds: 10));
+        .timeout(ApiConfig.coldStart);
 
     _checkStatus(res);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -231,7 +320,7 @@ class ApiService {
           headers: _headers,
           body: jsonEncode({'query': query}),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(ApiConfig.standard);
 
     _checkStatus(res);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -249,7 +338,7 @@ class ApiService {
           Uri.parse('${ApiConfig.baseUrl}/foods/$foodId'),
           headers: _headers,
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(ApiConfig.standard);
 
     _checkStatus(res);
     return FoodItem.fromApiDetailJson(
@@ -276,7 +365,7 @@ class ApiService {
             'user_preferences': _preferencesToJson(preferences),
           }),
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(ApiConfig.coldStart);
 
     _checkStatus(res);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -328,12 +417,24 @@ class ApiService {
         ? ApiSupplyPressure.fromJson(data['supply_pressure_index'] as Map<String, dynamic>)
         : null;
 
+    // Null entries are expected: the API returns null for any category
+    // without a completed backtest rather than inventing a default.
+    final feedRaw = data['feed_cost_pressure'] as Map<String, dynamic>? ?? {};
+    final feedCostPressure = <String, ApiFeedCostPressure>{};
+    feedRaw.forEach((key, value) {
+      if (value is Map<String, dynamic>) {
+        feedCostPressure[key] = ApiFeedCostPressure.fromJson(value);
+      }
+    });
+
     return ApiOptimisationResult(
       optimisedBasket: optimisedBasket,
       substitutions: substitutions,
       comparison: comparison,
       insights: insights,
       supplyPressure: supplyPressure,
+      supplyInfluencedCount: (data['supply_influenced_count'] ?? 0) as int,
+      feedCostPressure: feedCostPressure,
     );
   }
 
@@ -350,7 +451,7 @@ class ApiService {
           headers: _headers,
           body: jsonEncode({'basket': basket.map((f) => f.id).toList()}),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(ApiConfig.coldStart);
 
     _checkStatus(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
@@ -383,7 +484,7 @@ class ApiService {
             'accepted': accepted,
           }),
         )
-        .timeout(const Duration(seconds: 5))
+        .timeout(ApiConfig.telemetry)
         .catchError((_) => http.Response('', 599));
   }
 
@@ -411,33 +512,77 @@ class ApiService {
         'dislikes': prefs.dislikes,
       };
 
+  // -------------------------------------------------------------------------
+  // Insights
+  //
+  // Each line requires the underlying score to have actually moved past
+  // _noiseBand. The previous version fired on any value above zero, so a
+  // change of 0.1 produced "Nutrition score up 0 pts", which asserts a benefit
+  // the number does not support.
+  //
+  // Regressions get a line too. A basket that came out pricier should say so
+  // rather than staying silent and letting the reader assume everything
+  // improved.
+  // -------------------------------------------------------------------------
+
   static List<String> _generateInsights(
     ApiBasketComparison comparison,
     List<ApiSubstitution> substitutions,
   ) {
     final insights = <String>[];
 
-    if (comparison.envReduction > 0) {
+    if (comparison.envReduction >= _noiseBand) {
       insights.add(
-        '🌱 Environmental impact reduced by ${comparison.envReduction.toStringAsFixed(0)} pts — '
-        'equivalent to meaningful CO₂ savings over a year',
+        '🌱 Environmental impact reduced by '
+        '${comparison.envReduction.toStringAsFixed(0)} pts',
+      );
+    } else if (comparison.envReduction <= -_noiseBand) {
+      insights.add(
+        '🌍 Environmental impact rose by '
+        '${comparison.envReduction.abs().toStringAsFixed(0)} pts with these swaps',
       );
     }
-    if (comparison.costReduction > 0) {
+
+    if (comparison.costReduction >= _noiseBand) {
       insights.add(
-        '💰 Cost score improved by ${comparison.costReduction.toStringAsFixed(0)} pts — '
-        'your basket is now cheaper across Tesco, ASDA and Aldi',
+        '💰 Cost score improved by '
+        '${comparison.costReduction.toStringAsFixed(0)} pts',
+      );
+    } else if (comparison.costReduction <= -_noiseBand) {
+      insights.add(
+        '💷 Cost score rose by '
+        '${comparison.costReduction.abs().toStringAsFixed(0)} pts — '
+        'this basket is pricier',
       );
     }
-    if (comparison.nutritionGain > 0) {
+
+    if (comparison.nutritionGain >= _noiseBand) {
       insights.add(
-        '💪 Nutrition score up ${comparison.nutritionGain.toStringAsFixed(0)} pts — '
+        '💪 Nutrition score up '
+        '${comparison.nutritionGain.toStringAsFixed(0)} pts — '
         'better protein and fibre balance',
       );
+    } else if (comparison.nutritionGain <= -_noiseBand) {
+      insights.add(
+        '🥄 Nutrition score down '
+        '${comparison.nutritionGain.abs().toStringAsFixed(0)} pts',
+      );
     }
+
+    // Supply is the distinguishing dimension, so say when it actually shaped
+    // a recommendation — and stay quiet when it did not.
+    final supplyDriven =
+        substitutions.where((s) => s.supplyInfluencedRationale).length;
+    if (supplyDriven > 0) {
+      insights.add(
+        '🌾 UK supply conditions shaped $supplyDriven of your '
+        '${substitutions.length} ${substitutions.length == 1 ? "swap" : "swaps"}',
+      );
+    }
+
     if (substitutions.isEmpty) {
       insights.add(
-        '✅ Your basket is already well-optimised! Consider adding more seasonal produce.',
+        '✅ No swaps improved on your basket across all four objectives.',
       );
     }
 
