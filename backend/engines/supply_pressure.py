@@ -33,19 +33,38 @@ DESIGN DECISIONS:
   excluding the grain — consistent with AgriESG scoring philosophy
 - Pressure scores capped at [0, 1] to ensure stable optimisation inputs
 
-KNOWN LIMITATION — OATS:
-------------------------
-extract_balance_sheet() looks for the 'of which free stock' row. AHDB publishes
-that line for wheat and barley but not for oats, so oats falls through to the
-insufficient-data branch and returns the neutral 0.5. That neutral value is a
-missing reading, not a measurement, and downstream code (see main.py and the
-Flutter impact screen) treats an exact 0.500 as "no data" rather than as
-mid-range pressure.
+OATS — RESOLVED, AND WHY THE MEASURES DIFFER BY GRAIN:
+------------------------------------------------------
+Oats previously returned the neutral 0.5 because the AHDB oats sheet publishes
+neither 'of which free stock' nor 'Exports'. Two missing rows, not one: the
+export line was the binding problem, since without it total demand was NaN and
+the stock-to-use ratio never computed at all.
 
-Every cereal sheet does carry a 'Commercial End-Season Stocks' row, so this is
-addressable by falling back to that measure when free stock is absent. Doing so
-changes what the index reports for oats, so it belongs in its own change with
-its own before-and-after comparison, not bundled into a path fix.
+Both extractions now fall back:
+
+    stocks   free stock            -> Commercial End-Season Stocks
+    demand   domestic + exports    -> domestic consumption only
+
+which means oats is measured differently from wheat and barley. That is
+defensible for one specific reason: calculate_grain_pressure() scores each
+grain by percentile rank within its OWN history, so an absolute level is never
+compared across grains. Only "where does this season sit against this grain's
+past" crosses the boundary, and that question is answerable from any
+internally consistent measure.
+
+It would not be defensible if the scores were compared on absolute level, and
+it would not be defensible to switch wheat and barley onto commercial stocks
+for symmetry — that measure ignores the operating stock requirement and would
+materially change two readings that are currently correct.
+
+Effect of the change (2024/25 vintage):
+    Oats     0.5000 (no data)  ->  0.1126  on 26 seasons
+    Wheat    0.4889            ->  0.4889  unchanged
+    Barley   0.1925            ->  0.1925  unchanged
+    Category stability spread   0.146  ->  0.215
+
+measures_used is returned in the index so which fallback applied is visible in
+the API response rather than buried here.
 """
 
 import pandas as pd
@@ -157,7 +176,7 @@ def load_animal_feed() -> pd.DataFrame:
 # STAGE 2: Balance Sheet Extraction
 # ─────────────────────────────────────────
 
-def extract_balance_sheet(raw_df: pd.DataFrame) -> pd.DataFrame:
+def extract_balance_sheet(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
     Extract structured balance sheet from raw AHDB supply/demand DataFrame.
 
@@ -175,8 +194,9 @@ def extract_balance_sheet(raw_df: pd.DataFrame) -> pd.DataFrame:
     This gives us the denominator for stock-to-use ratio that reflects
     all claims on available supply, not just domestic consumption.
 
-    Note: the 'of which free stock' row is absent from the Oats sheet, which is
-    why oats resolves to a neutral score. See the module docstring.
+    Returns the balance sheet and a dict naming which measure was used for
+    stocks and for demand, so a caller can surface the fallback rather than
+    silently reporting a number derived differently from its neighbours.
     """
 
     # Extract crop years from row 6, starting at column 1
@@ -188,39 +208,51 @@ def extract_balance_sheet(raw_df: pd.DataFrame) -> pd.DataFrame:
     data_rows.columns = crop_years
     data_rows.index = data_rows.index.astype(str).str.strip()
 
-    # Row labels as they actually appear in AHDB Excel files
-    # These were verified against the published dataset structure
-    rows_needed = {
-        'closing_stocks': 'of which free stock',
-        'domestic_use': 'Total Domestic Consumption',
-        'exports': 'Exports'
-    }
+    def row(label: str) -> pd.Series:
+        """Partial match handles minor label variations across grain sheets."""
+        matching = [idx for idx in data_rows.index if label.lower() in idx.lower()]
+        if not matching:
+            return pd.Series(dtype=float)
+        return pd.to_numeric(data_rows.loc[matching[0]], errors='coerce')
 
-    extracted = {}
-    for key, label in rows_needed.items():
-        # Partial match handles minor label variations across grain sheets
-        matching = [idx for idx in data_rows.index
-                   if label.lower() in idx.lower()]
-        if matching:
-            row = data_rows.loc[matching[0]]
-            extracted[key] = pd.to_numeric(row, errors='coerce')
-        else:
-            extracted[key] = pd.Series(dtype=float)
+    measures = {}
 
-    result = pd.DataFrame(extracted)
+    # Stocks. Free stock is preferred: it is the genuinely available buffer
+    # once the operating stock requirement is met. Where AHDB does not publish
+    # it, commercial end-season stocks is the next best consistent series for
+    # that grain.
+    stocks = row('of which free stock')
+    if stocks.dropna().empty:
+        stocks = row('Commercial End-Season Stocks')
+        measures['stocks'] = 'commercial end-season stocks'
+    else:
+        measures['stocks'] = 'free stock'
 
-    # Total demand = domestic consumption + exports
-    # Design decision: exports included because they represent real
-    # claims on supply that reduce available buffer stock
-    result['total_demand'] = result['domestic_use'] + result['exports']
+    # Demand. Exports are included where published because they are real claims
+    # on supply that reduce the available buffer. The oats sheet carries no
+    # export line, only an 'Exportable surplus' figure, which is a different
+    # concept and is not substituted in.
+    domestic = row('Total Domestic Consumption')
+    exports = row('Exports')
+    if exports.dropna().empty:
+        demand = domestic
+        measures['demand'] = 'domestic consumption only'
+    else:
+        demand = domestic + exports
+        measures['demand'] = 'domestic consumption + exports'
 
-    # Stock-to-use ratio
-    # Design decision: free stock used rather than commercial end-season stocks
-    # because free stock is the genuinely available buffer after operating
-    # stock requirements are met. Negative values preserved as meaningful signals.
+    result = pd.DataFrame({
+        'closing_stocks': stocks,
+        'domestic_use': domestic,
+        'exports': exports,
+        'total_demand': demand,
+    })
+
+    # Stock-to-use ratio. Negative values are preserved as meaningful signals:
+    # a free stock deficit is a real condition, not bad data.
     result['stock_to_use'] = result['closing_stocks'] / result['total_demand']
 
-    return result
+    return result, measures
 
 
 # ─────────────────────────────────────────
@@ -365,7 +397,11 @@ def get_supply_pressure_index() -> dict:
             'cereals': 0.47,
             'eggs': 0.58
         },
-        'data_vintage': '2024/25'
+        'data_vintage': '2024/25',
+        'measures_used': {
+            'Wheat':  {'stocks': 'free stock', 'demand': 'domestic consumption + exports'},
+            'Oats':   {'stocks': 'commercial end-season stocks', 'demand': 'domestic consumption only'}
+        }
     }
     """
 
@@ -376,9 +412,12 @@ def get_supply_pressure_index() -> dict:
     grain_pressures = {}
     data_vintage = None
 
+    measures_used = {}
+
     for grain in GRAINS:
-        balance_sheet = extract_balance_sheet(raw_data[grain])
+        balance_sheet, measures = extract_balance_sheet(raw_data[grain])
         grain_pressures[grain] = calculate_grain_pressure(balance_sheet)
+        measures_used[grain] = measures
 
         # Capture most recent crop year for transparency
         valid_years = balance_sheet['stock_to_use'].dropna().index.tolist()
@@ -391,7 +430,11 @@ def get_supply_pressure_index() -> dict:
     return {
         'grain_pressure': grain_pressures,
         'food_category_pressure': food_category_pressure,
-        'data_vintage': data_vintage
+        'data_vintage': data_vintage,
+        # Which stock and demand series backed each grain. Surfaced rather than
+        # hidden, because oats is derived from different rows than wheat and
+        # barley and a reader should be able to see that.
+        'measures_used': measures_used,
     }
 
 
@@ -406,7 +449,10 @@ if __name__ == "__main__":
     print("Grain Pressure Scores:")
     for grain, score in result['grain_pressure'].items():
         bar = '█' * int(score * 20)
-        note = '  (neutral default — no free stock row published)' if score == 0.5 else ''
+        m = result['measures_used'].get(grain, {})
+        note = f"  [{m.get('stocks', '?')} / {m.get('demand', '?')}]"
+        if score == 0.5:
+            note += '  (neutral default — insufficient data)'
         print(f"  {grain:<8} {score:.3f}  {bar}{note}")
 
     print(f"\nFood Category Pressure Scores (data vintage: {result['data_vintage']}):")

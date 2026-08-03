@@ -211,8 +211,87 @@ class SubstitutionCard extends StatelessWidget {
     this.isLowRealism = false,
   });
 
+  // ---------------------------------------------------------------------------
+  // Supply stability badge.
+  //
+  // Supply is the distinguishing dimension of this product, and until now it
+  // was claimed in the headers of the impact screens and invisible on every
+  // individual recommendation. supplyStability was already being passed into
+  // this card and simply never drawn.
+  //
+  // Two rules govern when it shows:
+  //
+  //   The pipeline returns exactly 0.5 for a food with no published stock
+  //   series. That is absent data, not a mid-range reading, and must never be
+  //   rendered as a measurement.
+  //
+  //   Unremarkable readings stay quiet. A chip on every card saying "56%
+  //   supply" is noise, and it dilutes the cards where supply genuinely
+  //   distinguished the swap.
+  //
+  // The chip carries words rather than a percentage because the rationale
+  // string already states both figures, e.g. "steadier UK supply (0.64 vs
+  // 0.57)". Duplicating the number would add nothing; a scannable label does.
+  // ---------------------------------------------------------------------------
+  static const double _neutralStability = 0.5;
+  static const double _neutralEpsilon = 0.001;
+  static const double _steadyThreshold = 0.60;
+  static const double _tightThreshold = 0.40;
+
+  // Movements below these are rounding rather than change, and a chip reading
+  // "−0.0 kg CO₂" is worse than no chip at all.
+  static const double _carbonBand = 0.05;
+  static const double _costBand = 0.01;
+
+  bool get _hasSupplyData =>
+      supplyStability != null &&
+      (supplyStability! - _neutralStability).abs() > _neutralEpsilon;
+
+  Widget? _supplyChip() {
+    if (!_hasSupplyData) return null;
+    final v = supplyStability!;
+    if (v >= _steadyThreshold) {
+      return _intelligenceMarker(
+        'Steadier supply',
+        HugeIcons.strokeRoundedPlant02,
+        AppColors.success,
+      );
+    }
+    if (v <= _tightThreshold) {
+      return _intelligenceMarker(
+        'Tighter supply',
+        HugeIcons.strokeRoundedPlant02,
+        AppColors.warning,
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // A Pareto-optimal swap is undominated, not better on every objective, so
+    // it can legitimately give ground somewhere. The previous version only
+    // drew a chip when the value was positive, which meant a swap that raised
+    // carbon or cost showed nothing at all in that slot and the trade-off was
+    // invisible.
+    final chips = <Widget>[];
+
+    if (carbonSaved.abs() >= _carbonBand) {
+      chips.add(_savingsChip(
+        '${carbonSaved > 0 ? "−" : "+"}'
+        '${carbonSaved.abs().toStringAsFixed(1)} kg CO₂',
+        carbonSaved > 0 ? AppColors.carbonColor : AppColors.warning,
+      ));
+    }
+    if (costSaved.abs() >= _costBand) {
+      chips.add(_savingsChip(
+        '${costSaved > 0 ? "−" : "+"}£${costSaved.abs().toStringAsFixed(2)}',
+        costSaved > 0 ? AppColors.costColor : AppColors.warning,
+      ));
+    }
+    final supply = _supplyChip();
+    if (supply != null) chips.add(supply);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -302,35 +381,26 @@ class SubstitutionCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          // Savings chips
-          Row(
+          // Wrap rather than Row: with the supply chip added, three chips plus
+          // the rank marker overflow a narrow screen.
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (carbonSaved > 0)
-                _savingsChip(
-                  '−${carbonSaved.toStringAsFixed(1)} kg CO₂',
-                  AppColors.carbonColor,
-                ),
-              if (carbonSaved > 0 && costSaved > 0) const SizedBox(width: 8),
-              if (costSaved > 0)
-                _savingsChip(
-                  '−£${costSaved.toStringAsFixed(2)}',
-                  AppColors.costColor,
-                ),
-              const Spacer(),
+              ...chips,
               if (paretoRank != null)
                 _intelligenceMarker(
                   '#$paretoRank Rank',
                   HugeIcons.strokeRoundedTarget02,
                   AppColors.primary,
                 ),
-              if (isLowRealism) ...[
-                const SizedBox(width: 8),
+              if (isLowRealism)
                 _intelligenceMarker(
                   'Stretch',
                   HugeIcons.strokeRoundedAlertCircle,
                   AppColors.warning,
                 ),
-              ],
             ],
           ),
         ],
@@ -409,7 +479,7 @@ class SectionHeader extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          if (subtitle != null) ...[
+          if (subtitle != null && subtitle!.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               subtitle!,
