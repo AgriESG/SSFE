@@ -7,6 +7,12 @@ Inputs (place alongside this script, or pass --data DIR):
     UK_feed_ingredient_prices.xlsx     AHDB, weekly, from 2015-01-30
     All_historic_pig_data.xlsx         AHDB, weekly GB SPP deadweight pig price
     Weekly_deadweight_cattle_prices.xlsx  AHDB, weekly GB deadweight cattle
+    Supermarket_red_meat_prices.xlsx   AHDB, weekly UK supermarket retail prices
+
+Requires: pandas, numpy, scipy, openpyxl
+
+The dated validation snapshot (UK_feed_ingredient_prices_YYYY-MM-DD.xlsx) must be
+copied or renamed to UK_feed_ingredient_prices.xlsx before running.
 
 Run:
     python feed_lead_lag.py --data ../live --pig-data ../validation
@@ -82,6 +88,30 @@ def load_pig(path: Path) -> pd.Series:
     d["price"] = pd.to_numeric(d["price"], errors="coerce")
     d = d.dropna()
     return d.set_index("week_ending")["price"].sort_index()
+
+
+def load_retail(path: Path, sheet: str) -> pd.Series:
+    """
+    AHDB supermarket red meat prices, pence per kg, header on row 6, data from
+    row 8, with a blank leading column.
+
+    Returns a composite index: each cut rebased to 100 at the start of the
+    series, then averaged. Rebasing first stops an expensive cut such as fillet
+    steak dominating the mean purely because of its price level.
+    """
+    raw = pd.read_excel(path, sheet_name=sheet, header=None)
+    header = [str(x).replace("\n", " ").strip() for x in raw.iloc[6]]
+    d = raw.iloc[8:].copy()
+    d.columns = header
+    d = d.iloc[:, 1:]
+    cols = list(d.columns)
+    d = d.rename(columns={cols[0]: "week"})
+    d["week"] = pd.to_datetime(d["week"], errors="coerce")
+    cuts = [c for c in d.columns if c != "week"]
+    for c in cuts:
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+    d = d.dropna(subset=["week"]).set_index("week").sort_index()
+    return (d[cuts] / d[cuts].iloc[0]).mean(axis=1) * 100
 
 
 def load_cattle(path: Path, sheet: str, region: str = "England and Wales") -> pd.Series:
@@ -182,6 +212,35 @@ def main():
         print(f"  {label:24s} best lag {int(best.lag_weeks):3d} wks "
               f"({best.months:4.1f} mo)  r={best.r:+.3f}  p={best.p:.3f}  "
               f"n={int(best.n)}  -> {verdict}")
+
+    print("\n" + "=" * 72)
+    print("LINK 2: farm-gate -> supermarket retail")
+    retail_file = d / "Supermarket_red_meat_prices.xlsx"
+    short_lags = [0, 2, 4, 6, 8, 10, 13, 17, 20, 26]
+
+    pork_retail = load_retail(retail_file, "Pork cuts")
+    res = lead_lag(pig, pork_retail, short_lags)
+    print("\n  GB deadweight pig price -> supermarket pork retail index")
+    print(res.to_string(index=False))
+    best = res.loc[res.r.abs().idxmax()]
+    print(f"  -> peak lag {int(best.lag_weeks)} wks, r={best.r:+.3f}, p={best.p:.3f}")
+
+    steers = load_cattle(cattle_file, "Steers regional series")
+    beef_retail = load_retail(retail_file, "Beef cuts")
+    res = lead_lag(steers, beef_retail, short_lags)
+    print("\n  GB deadweight steer price -> supermarket beef retail index")
+    print(res.to_string(index=False))
+    best = res.loc[res.r.abs().idxmax()]
+    print(f"  -> peak lag {int(best.lag_weeks)} wks, r={best.r:+.3f}, p={best.p:.3f}")
+
+    print("\n" + "=" * 72)
+    print("FULL CHAIN: feed cost -> supermarket retail (expected weak)")
+    res = lead_lag(soy, pork_retail, [13, 20, 26, 30, 36, 39, 45, 52])
+    print(res.to_string(index=False))
+    best = res.loc[res.r.abs().idxmax()]
+    print(f"  -> peak lag {int(best.lag_weeks)} wks, r={best.r:+.3f}, p={best.p:.3f}")
+    print("  Two measured links imply 28-34 wks. The direct estimate landing in")
+    print("  that window is a consistency check, not an independent result.")
 
     print("\n" + "=" * 72)
     print("CURRENT READING")

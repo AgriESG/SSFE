@@ -1,7 +1,25 @@
 """
 AgriESG — FastAPI Backend
 Food Optimisation Engine API
-Version: 0.3.1
+Version: 0.3.2
+
+WHAT CHANGED FROM 0.3.1:
+--------------------------
+1. Supply category is now read from a curated supply_category column in
+   Foods_Master instead of being derived from the coarse Category column.
+
+   The old derivation routed every Protein row to poultry and every Staple,
+   Fruit and Vegetable row to cereals. Because substitutions are
+   role-preserving, both sides of a swap always resolved to the same category,
+   supply stability had zero variance within any choice set, and its 0.15
+   weight acted on a constant. The beef, pork and eggs series were also
+   unreachable. Classification now lives next to the food it describes, where
+   it can be reviewed.
+
+2. Feed cost pressure added as a second, faster-moving component, from AHDB
+   weekly feed ingredient prices. Validated for PORK ONLY — see
+   data/validation/feed_lead_lag.md. Returns null for every other category
+   rather than a plausible-looking default.
 
 WHAT CHANGED FROM 0.3.0:
 --------------------------
@@ -64,6 +82,12 @@ from services.data_loader import load_food_data
 from engines.supply_pressure import get_supply_pressure_index
 from engines.pareto_optimiser import optimise_substitutions
 from engines.behavioural_realism import filter_by_realism
+from engines.feed_cost_pressure import (
+    current_feed_pressure,
+    describe_pressure,
+    load_feed_series,
+    VALIDATED_CATEGORIES as FEED_VALIDATED_CATEGORIES,
+)
 from api.metrics import RequestCounterMiddleware, router as metrics_router, _pipeline
 
 # ---------------------------------------------------------------------------
@@ -73,7 +97,7 @@ from api.metrics import RequestCounterMiddleware, router as metrics_router, _pip
 app = FastAPI(
     title="AgriESG Food Optimisation API",
     description="Multi-objective food basket optimisation: cost, nutrition, environment, supply stability.",
-    version="0.3.1",
+    version="0.3.2",
 )
 
 app.add_middleware(
@@ -141,39 +165,31 @@ def normalise_role(raw: str) -> str:
 
 # ---------------------------------------------------------------------------
 # Food category mapping for supply pressure
-# Maps functional food roles to supply pressure categories
+#
+# Read from the curated supply_category column in Foods_Master. Classification
+# is a judgement about each food, so it lives in the dataset next to the food
+# it describes rather than in a lookup table here, where it could not be
+# reviewed alongside the data.
+#
+# Values in use: poultry, pork, beef, dairy, bread, cereals, eggs, unmapped.
 # ---------------------------------------------------------------------------
 
-ROLE_TO_SUPPLY_CATEGORY = {
-    "protein": "poultry",    # default protein — refined per food if needed
-    "dairy":   "dairy",
-    "dairy_alt": "dairy",
-    "carb":    "cereals",
-    "bread":   "bread",
-    "drink":   "dairy",
-    "fruit":   "cereals",    # fruits not in supply model — neutral
-    "vegetable": "cereals",  # vegetables not in supply model — neutral
-    "snack":   "cereals",
-    "other":   "cereals",
-}
-
-# More precise protein category mapping by food category
-CATEGORY_TO_SUPPLY = {
-    "Protein": "poultry",
-    "Dairy":   "dairy",
-    "Staples": "cereals",
-    "Fruits":  "cereals",
-    "Vegetables": "cereals",
-}
+UNMAPPED_SUPPLY_CATEGORY = "unmapped"
 
 
 def get_supply_category(food_row: pd.Series) -> str:
     """
-    Map a food item to its supply pressure category.
-    Uses food Category for more precise mapping than role alone.
+    Read a food's supply pressure category from the dataset.
+
+    Falls back to unmapped when the column is absent or blank, so a food with
+    no classification yields no supply signal rather than being silently
+    assigned one.
     """
-    category = str(food_row.get("Category", "")).strip()
-    return CATEGORY_TO_SUPPLY.get(category, "cereals")
+    val = food_row.get("supply_category")
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return UNMAPPED_SUPPLY_CATEGORY
+    text = str(val).strip()
+    return text or UNMAPPED_SUPPLY_CATEGORY
 
 
 # ---------------------------------------------------------------------------
@@ -186,10 +202,11 @@ _prices: pd.DataFrame = None
 _score_bounds: dict = {}
 _food_lookup: dict = {}
 _supply_pressure: dict = {}
+_feed_series = None
 
 
 def get_data():
-    global _foods, _subs, _prices, _score_bounds, _food_lookup, _supply_pressure
+    global _foods, _subs, _prices, _score_bounds, _food_lookup, _supply_pressure, _feed_series
 
     if _foods is None:
         _foods, _subs, _prices = load_food_data()
@@ -243,6 +260,12 @@ def get_data():
         except Exception as e:
             print(f"[WARNING] Supply pressure index failed to load: {e}")
             _supply_pressure = {}
+
+        # Weekly feed prices for the feed cost pressure component. Optional:
+        # a missing file degrades that one signal rather than the endpoint.
+        _feed_series = load_feed_series()
+        if _feed_series is None:
+            print("[WARNING] Feed price series unavailable, feed cost pressure disabled")
 
     return _foods, _subs, _prices
 
@@ -437,7 +460,7 @@ class FoodSearchRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "AgriESG Food Optimisation API", "version": "0.3.1"}
+    return {"message": "AgriESG Food Optimisation API", "version": "0.3.2"}
 
 
 @app.get("/health")
@@ -756,7 +779,38 @@ def optimise_basket(request: BasketRequest):
         "supply_influenced_count": sum(
             1 for s in substitutions if s.get("supply_influenced_rationale")
         ),
-        "engine_version": "0.3.1",
+        # ── v0.3.2 new field ──
+        # Second pressure component, kept separate from supply_pressure_index
+        # because it has a different data source, a different horizon and a
+        # different validation status. Null for every category except pork.
+        "feed_cost_pressure": {
+            c: current_feed_pressure(_feed_series, c)
+            for c in sorted(FEED_VALIDATED_CATEGORIES)
+        },
+        "engine_version": "0.3.2",
+    }
+
+
+@app.get("/feed-cost-pressure")
+def feed_cost_pressure_endpoint():
+    """
+    Feed cost pressure, derived from AHDB weekly feed ingredient prices.
+
+    Separate from /supply-pressure because it is a different measurement with
+    a different horizon and a different validation status. Validated for pork
+    only; every other category returns null rather than a default.
+    """
+    get_data()
+    results = {c: current_feed_pressure(_feed_series, c) for c in sorted(FEED_VALIDATED_CATEGORIES)}
+    return {
+        "feed_cost_pressure": results,
+        "explanations": {c: describe_pressure(r) for c, r in results.items()},
+        "validated_categories": sorted(FEED_VALIDATED_CATEGORIES),
+        "untested_categories": ["poultry", "beef", "dairy", "eggs"],
+        "note": "Beef was tested and showed no significant relationship at any lag "
+                "from 8 weeks to 2 years; feed is a small share of UK beef production "
+                "cost. Poultry, dairy and eggs are untested. See "
+                "data/validation/feed_lead_lag.md.",
     }
 
 
