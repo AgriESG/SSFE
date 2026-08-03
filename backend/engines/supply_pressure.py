@@ -32,6 +32,20 @@ DESIGN DECISIONS:
 - Neutral score (0.5) applied when data is insufficient rather than
   excluding the grain — consistent with AgriESG scoring philosophy
 - Pressure scores capped at [0, 1] to ensure stable optimisation inputs
+
+KNOWN LIMITATION — OATS:
+------------------------
+extract_balance_sheet() looks for the 'of which free stock' row. AHDB publishes
+that line for wheat and barley but not for oats, so oats falls through to the
+insufficient-data branch and returns the neutral 0.5. That neutral value is a
+missing reading, not a measurement, and downstream code (see main.py and the
+Flutter impact screen) treats an exact 0.500 as "no data" rather than as
+mid-range pressure.
+
+Every cereal sheet does carry a 'Commercial End-Season Stocks' row, so this is
+addressable by falling back to that measure when free stock is absent. Doing so
+changes what the index reports for oats, so it belongs in its own change with
+its own before-and-after comparison, not bundled into a path fix.
 """
 
 import pandas as pd
@@ -39,12 +53,22 @@ import numpy as np
 from pathlib import Path
 
 # ─────────────────────────────────────────────
-# File paths — relative to project root (SSFE/)
+# File paths
 # ─────────────────────────────────────────────
-# Resolve path relative to this file so it works regardless of where uvicorn launches from
+# Resolved relative to this file so it works regardless of where uvicorn
+# launches from.
+#
+# data/ is split by how each file behaves over time:
+#   data/live/        re-downloaded from AHDB on a weekly cadence
+#   data/reference/   the food dataset, changes only when edited
+#   data/validation/  frozen snapshots backing the published backtest
+#
+# These two are AHDB balance sheets, so they live in data/live/. An earlier
+# version pointed at data/ directly and broke when those subfolders were
+# introduced.
 _BASE = Path(__file__).resolve().parent.parent.parent
-SUPPLY_DEMAND_PATH = _BASE / "data" / "supply_demand.xlsx"
-ANIMAL_FEED_PATH = _BASE / "data" / "animal_feed_production.xlsx"
+SUPPLY_DEMAND_PATH = _BASE / "data" / "live" / "supply_demand.xlsx"
+ANIMAL_FEED_PATH = _BASE / "data" / "live" / "animal_feed_production.xlsx"
 
 # Grains tracked — these are the three cereals with
 # complete UK balance sheet data in the AHDB dataset
@@ -88,7 +112,18 @@ def load_supply_demand() -> dict:
     Returns a dict keyed by grain name, each value is a raw DataFrame.
     Raw format is preserved here — parsing happens in extract_balance_sheet()
     to keep loading and transformation separate (separation of concerns).
+
+    Raises FileNotFoundError naming the path that was tried, so a future
+    directory change fails loudly at startup rather than surfacing as an
+    opaque pandas error at request time.
     """
+    if not SUPPLY_DEMAND_PATH.exists():
+        raise FileNotFoundError(
+            f"Balance sheet not found at {SUPPLY_DEMAND_PATH}. "
+            f"Expected data/live/supply_demand.xlsx relative to the repository "
+            f"root (resolved base: {_BASE})."
+        )
+
     data = {}
     for grain in GRAINS:
         df = pd.read_excel(SUPPLY_DEMAND_PATH, sheet_name=grain, header=None)
@@ -103,6 +138,13 @@ def load_animal_feed() -> pd.DataFrame:
     We use the monthly view sheet which shows grain usage by feed category
     in thousand tonnes. This is the empirical basis for FOOD_CATEGORY_WEIGHTS.
     """
+    if not ANIMAL_FEED_PATH.exists():
+        raise FileNotFoundError(
+            f"Animal feed production data not found at {ANIMAL_FEED_PATH}. "
+            f"Expected data/live/animal_feed_production.xlsx relative to the "
+            f"repository root (resolved base: {_BASE})."
+        )
+
     df = pd.read_excel(
         ANIMAL_FEED_PATH,
         sheet_name='GB animal feed month view',
@@ -132,6 +174,9 @@ def extract_balance_sheet(raw_df: pd.DataFrame) -> pd.DataFrame:
     Design decision: Total Demand = Total Domestic Consumption + Exports
     This gives us the denominator for stock-to-use ratio that reflects
     all claims on available supply, not just domestic consumption.
+
+    Note: the 'of which free stock' row is absent from the Oats sheet, which is
+    why oats resolves to a neutral score. See the module docstring.
     """
 
     # Extract crop years from row 6, starting at column 1
@@ -217,7 +262,9 @@ def calculate_grain_pressure(balance_sheet: pd.DataFrame) -> float:
 
     if len(stu) < 3:
         # Insufficient data — return neutral score
-        # Consistent with AgriESG missing data philosophy
+        # Consistent with AgriESG missing data philosophy.
+        # Downstream code treats exactly 0.5 as "no data" rather than as a
+        # mid-range measurement, so this value must stay exact.
         return 0.5
 
     # Current state — most recent crop year
@@ -359,7 +406,8 @@ if __name__ == "__main__":
     print("Grain Pressure Scores:")
     for grain, score in result['grain_pressure'].items():
         bar = '█' * int(score * 20)
-        print(f"  {grain:<8} {score:.3f}  {bar}")
+        note = '  (neutral default — no free stock row published)' if score == 0.5 else ''
+        print(f"  {grain:<8} {score:.3f}  {bar}{note}")
 
     print(f"\nFood Category Pressure Scores (data vintage: {result['data_vintage']}):")
     for category, score in result['food_category_pressure'].items():
