@@ -1,7 +1,25 @@
 """
 AgriESG — FastAPI Backend
 Food Optimisation Engine API
-Version: 0.3.5
+Version: 0.3.6
+
+WHAT CHANGED FROM 0.3.5:
+--------------------------
+crop_provenance now matches directly-eaten foods to their own grain by name
+instead of through the category blend.
+
+  The blend was reporting "Wheat: your Oats (rolled)". Rolled oats sit in the
+  cereals category, whose mapping is Wheat 0.50 / Oats 0.40 / Barley 0.10, and
+  wheat's share cleared the naming threshold. That blend is correct for
+  PRESSURE — a generic cereal product does draw on all three — but wrong for
+  PROVENANCE, because a specific food traces to a specific grain. Bread is
+  wheat. Rolled oats are oats.
+
+  The feed side keeps the blend, and should: a chicken genuinely eats a mixed
+  ration, so naming both wheat and barley behind it is accurate.
+
+  Foods whose grain is not one of the three tracked cereals (rice, maize) are
+  left out of the direct lists rather than being assigned one.
 
 WHAT CHANGED FROM 0.3.4:
 --------------------------
@@ -140,7 +158,7 @@ from api.metrics import RequestCounterMiddleware, router as metrics_router, _pip
 app = FastAPI(
     title="AgriESG Food Optimisation API",
     description="Multi-objective food basket optimisation: cost, nutrition, environment, supply stability.",
-    version="0.3.5",
+    version="0.3.6",
 )
 
 app.add_middleware(
@@ -503,7 +521,7 @@ class FoodSearchRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "AgriESG Food Optimisation API", "version": "0.3.5"}
+    return {"message": "AgriESG Food Optimisation API", "version": "0.3.6"}
 
 
 @app.get("/health")
@@ -830,6 +848,33 @@ def optimise_basket(request: BasketRequest):
     # prices to forecast from.
     DIRECT_CATEGORIES = {"bread", "cereals"}
 
+    # Directly-eaten grain products trace to ONE grain, matched on the food
+    # name. Going through the category blend put rolled oats under wheat,
+    # because the cereals mapping is Wheat 0.50 / Oats 0.40 / Barley 0.10 and
+    # wheat's share cleared the threshold. Correct for pressure, wrong for
+    # provenance: nobody eating porridge is eating wheat.
+    #
+    # First match wins, so more specific terms sit above the general ones they
+    # would otherwise shadow. Rice and maize match nothing and are simply left
+    # out, since neither is among the three tracked UK cereals.
+    DIRECT_GRAIN_TERMS = [
+        ("oat", "Oats"),
+        ("barley", "Barley"),
+        ("bulgur", "Wheat"),
+        ("wheat", "Wheat"),
+        ("bread", "Wheat"),
+        ("flour", "Wheat"),
+        ("pasta", "Wheat"),
+        ("couscous", "Wheat"),
+    ]
+
+    def _direct_grain(food_name: str) -> Optional[str]:
+        lowered = food_name.lower()
+        for term, grain in DIRECT_GRAIN_TERMS:
+            if term in lowered:
+                return grain
+        return None
+
     # A grain counts as being behind a category when it is at least this much
     # of that category's mapping. Below it the grain is a trace contributor and
     # naming it would overstate the connection.
@@ -839,8 +884,10 @@ def optimise_basket(request: BasketRequest):
     grain_pressure = _supply_pressure.get("grain_pressure", {}) or {}
     measures = _supply_pressure.get("measures_used", {}) or {}
 
-    # Basket foods grouped by supply category.
+    # Basket foods grouped by supply category, and directly-eaten grain
+    # products additionally pinned to their own grain.
     foods_by_category: dict[str, list[str]] = {}
+    direct_by_grain: dict[str, list[str]] = {}
     for fid in resolved_ids:
         row, _ = get_food_by_id(fid)
         if row is None:
@@ -848,7 +895,12 @@ def optimise_basket(request: BasketRequest):
         category = get_supply_category(row)
         if category == UNMAPPED_SUPPLY_CATEGORY:
             continue
-        foods_by_category.setdefault(category, []).append(str(row["Food_name"]))
+        name = str(row["Food_name"])
+        foods_by_category.setdefault(category, []).append(name)
+        if category in DIRECT_CATEGORIES:
+            grain = _direct_grain(name)
+            if grain:
+                direct_by_grain.setdefault(grain, []).append(name)
 
     def _state(pressure: Optional[float]) -> str:
         """
@@ -869,14 +921,16 @@ def optimise_basket(request: BasketRequest):
         (g, {c: w.get(g, 0.0) for c, w in FOOD_CATEGORY_WEIGHTS.items()})
         for g in grain_pressure
     ):
-        direct, via_feed = [], []
+        # Direct: matched by name, one grain per food.
+        direct = list(direct_by_grain.get(grain, []))
+
+        # Feed: the blend is right here, because a mixed ration really does
+        # draw on several grains at once.
+        via_feed = []
         for category, weight in weights_by_cat.items():
-            if weight < PROVENANCE_THRESHOLD:
+            if weight < PROVENANCE_THRESHOLD or category in DIRECT_CATEGORIES:
                 continue
-            names = foods_by_category.get(category, [])
-            if not names:
-                continue
-            (direct if category in DIRECT_CATEGORIES else via_feed).extend(names)
+            via_feed.extend(foods_by_category.get(category, []))
 
         if not direct and not via_feed:
             continue
@@ -940,7 +994,7 @@ def optimise_basket(request: BasketRequest):
             "basket_items_traced": sum(len(v) for v in foods_by_category.values()),
             "basket_items_total": len(resolved_ids),
         },
-        "engine_version": "0.3.5",
+        "engine_version": "0.3.6",
     }
 
 
