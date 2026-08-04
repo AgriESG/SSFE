@@ -69,6 +69,9 @@ class ApiOptimisationResult {
   /// backtest appear; everything else is absent rather than defaulted.
   final Map<String, ApiFeedCostPressure> feedCostPressure;
 
+  /// Which UK crops the basket rests on. Null when the API did not return it.
+  final ApiCropProvenance? cropProvenance;
+
   ApiOptimisationResult({
     required this.optimisedBasket,
     required this.substitutions,
@@ -77,6 +80,7 @@ class ApiOptimisationResult {
     this.supplyPressure,
     this.supplyInfluencedCount = 0,
     this.feedCostPressure = const {},
+    this.cropProvenance,
   });
 }
 
@@ -110,6 +114,82 @@ class ApiFeedCostPressure {
             .map((v) => (v ?? 0) as int)
             .toList(),
         asOf: (j['as_of'] ?? '').toString(),
+      );
+}
+
+/// Which UK crops the basket rests on, direct and through animal feed.
+///
+/// Replaces an earlier "exposure" model that ranked the user's categories by
+/// pressure. That produced circular statements — "bread is the tightest
+/// category, and your bread depends on it" — and manufactured significance out
+/// of readings that were all comfortable.
+///
+/// Provenance runs the other way and is interesting on an ordinary season:
+/// poultry rations are roughly 60% wheat, beef roughly 30% barley, so a
+/// chicken is in supply terms largely a wheat product. Almost no shopper
+/// knows that.
+///
+/// Contains no forecast. Nothing links cereal stock levels to shelf prices.
+class ApiCropGrain {
+  final String grain;
+  final double? pressure;
+  final String state;
+  final int? seasons;
+  final String? vintage;
+  final List<String> directFoods;
+  final List<String> feedFoods;
+
+  ApiCropGrain({
+    required this.grain,
+    this.pressure,
+    this.state = '',
+    this.seasons,
+    this.vintage,
+    this.directFoods = const [],
+    this.feedFoods = const [],
+  });
+
+  bool get hasData => pressure != null;
+
+  factory ApiCropGrain.fromJson(Map<String, dynamic> j) => ApiCropGrain(
+        grain: (j['grain'] ?? '').toString(),
+        pressure: (j['pressure'] as num?)?.toDouble(),
+        state: (j['state'] ?? '').toString(),
+        seasons: (j['seasons'] as num?)?.toInt(),
+        vintage: j['vintage'] as String?,
+        directFoods: (j['direct_foods'] as List? ?? [])
+            .map((e) => e.toString())
+            .toList(),
+        feedFoods: (j['feed_foods'] as List? ?? [])
+            .map((e) => e.toString())
+            .toList(),
+      );
+}
+
+class ApiCropProvenance {
+  final List<ApiCropGrain> grains;
+  final bool anyTight;
+  final int basketItemsTraced;
+  final int basketItemsTotal;
+
+  ApiCropProvenance({
+    this.grains = const [],
+    this.anyTight = false,
+    this.basketItemsTraced = 0,
+    this.basketItemsTotal = 0,
+  });
+
+  bool get hasAnything => grains.isNotEmpty;
+
+  factory ApiCropProvenance.fromJson(Map<String, dynamic> j) =>
+      ApiCropProvenance(
+        grains: (j['grains'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(ApiCropGrain.fromJson)
+            .toList(),
+        anyTight: j['any_tight'] ?? false,
+        basketItemsTraced: (j['basket_items_traced'] ?? 0) as int,
+        basketItemsTotal: (j['basket_items_total'] ?? 0) as int,
       );
 }
 
@@ -163,6 +243,16 @@ class ApiSubstitution {
   final String originalSupplyCategory;
   final String substituteSupplyCategory;
 
+  /// Real physical deltas, per kilogram of product.
+  ///
+  /// envDelta and costDelta above are 0-100 normalised scores — the currency
+  /// the optimiser ranks on, not quantities. Rendering them with "kg CO2" and
+  /// "£" labels was stating a unit the number did not have. These two are the
+  /// figures a person can act on, and are null where the source data is
+  /// missing so the UI shows nothing rather than a fabricated zero.
+  final double? carbonDeltaKgPerKg;
+  final double? costDeltaGbpPerKg;
+
   ApiSubstitution({
     required this.originalId,
     required this.originalName,
@@ -183,6 +273,8 @@ class ApiSubstitution {
     this.supplyInfluencedRationale = false,
     this.originalSupplyCategory = '',
     this.substituteSupplyCategory = '',
+    this.carbonDeltaKgPerKg,
+    this.costDeltaGbpPerKg,
   });
 
   /// The pipeline returns exactly 0.5 for foods with no published supply
@@ -213,6 +305,8 @@ class ApiSubstitution {
         originalSupplyCategory: (j['original_supply_category'] ?? '').toString(),
         substituteSupplyCategory:
             (j['substitute_supply_category'] ?? '').toString(),
+        carbonDeltaKgPerKg: (j['carbon_delta_kg_per_kg'] as num?)?.toDouble(),
+        costDeltaGbpPerKg: (j['cost_delta_gbp_per_kg'] as num?)?.toDouble(),
       );
 }
 
@@ -435,6 +529,10 @@ class ApiService {
       supplyPressure: supplyPressure,
       supplyInfluencedCount: (data['supply_influenced_count'] ?? 0) as int,
       feedCostPressure: feedCostPressure,
+      cropProvenance: data['crop_provenance'] is Map<String, dynamic>
+          ? ApiCropProvenance.fromJson(
+              data['crop_provenance'] as Map<String, dynamic>)
+          : null,
     );
   }
 

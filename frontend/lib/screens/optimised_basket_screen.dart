@@ -317,7 +317,10 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
             _buildComparisonBanner(),
             const SizedBox(height: 16),
             if (result.supplyPressure != null)
-              _buildSupplyPressureBanner(result.supplyPressure!),
+              _buildSupplyPressureBanner(
+                result.supplyPressure!,
+                result.cropProvenance,
+              ),
             const SizedBox(height: 24),
             if (meaningful.isNotEmpty) ...[
               SectionHeader(
@@ -408,8 +411,8 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
         replacementName: s.substituteName,
         replacementEmoji: _emojiFor(s.substituteName),
         reason: s.rationale,
-        carbonSaved: s.envDelta,
-        costSaved: s.costDelta,
+        carbonSaved: s.carbonDeltaKgPerKg,
+        costSaved: s.costDeltaGbpPerKg,
         supplyStability: s.supplyStability,
         realismScore: s.realismScore,
         paretoRank: s.paretoRank,
@@ -696,7 +699,121 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
 
   bool _isNoData(double v) => (v - _neutralPressure).abs() < _neutralEpsilon;
 
-  Widget _buildSupplyPressureBanner(ApiSupplyPressure pressure) {
+  /// Where this basket comes from, in UK crops.
+  ///
+  /// Traces provenance rather than ranking pressure. An earlier version named
+  /// the user's "tightest category", which was circular — the category is the
+  /// food type, so "bread is tightest and your bread depends on it" says
+  /// nothing — and it invented a ranking out of readings that were all
+  /// comfortable.
+  ///
+  /// The feed route is the half worth showing: a chicken is, in supply terms,
+  /// largely a wheat product, and hardly any shopper knows that. It also holds
+  /// up on an ordinary season, which matters because most seasons are ordinary.
+  Widget? _buildProvenanceLines(ApiCropProvenance? p) {
+    if (p == null || !p.hasAnything) return null;
+
+    String joinNames(List<String> names) {
+      final shown = names.take(3).toList();
+      final extra = names.length - shown.length;
+      final base = shown.length == 1
+          ? shown.first
+          : '${shown.take(shown.length - 1).join(", ")} and ${shown.last}';
+      return extra > 0 ? '$base and $extra more' : base;
+    }
+
+    final rows = <Widget>[];
+    for (final g in p.grains) {
+      final parts = <String>[];
+      if (g.directFoods.isNotEmpty) {
+        parts.add('your ${joinNames(g.directFoods)}');
+      }
+      if (g.feedFoods.isNotEmpty) {
+        parts.add('the feed behind your ${joinNames(g.feedFoods)}');
+      }
+      if (parts.isEmpty) continue;
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 5),
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+              children: [
+                TextSpan(
+                  text: '${g.grain}: ',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                TextSpan(text: '${parts.join(", and ")}.'),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    if (rows.isEmpty) return null;
+
+    // State sentence. Grains sharing a reading are grouped so the line reads
+    // as prose rather than as three separate verdicts.
+    final byState = <String, List<String>>{};
+    for (final g in p.grains) {
+      if (!g.hasData || g.state.isEmpty) continue;
+      byState.putIfAbsent(g.state, () => []).add(g.grain);
+    }
+    final stateParts = byState.entries.map((e) {
+      final names = e.value;
+      final subject = names.length == 1
+          ? names.first
+          : '${names.take(names.length - 1).join(", ")} and ${names.last}';
+      final verb = names.length == 1 ? 'is' : 'are';
+      return '$subject $verb ${e.key}';
+    }).toList();
+
+    final n = p.grains.length;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Your basket traces back to $n UK ${n == 1 ? "crop" : "crops"}',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          ...rows,
+          if (stateParts.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${stateParts.join("; ")} this season.',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textPrimary,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupplyPressureBanner(
+    ApiSupplyPressure pressure,
+    ApiCropProvenance? provenance,
+  ) {
     final grains = pressure.grainPressure.entries.toList();
     final categories = pressure.foodCategoryPressure.entries.take(3).toList();
 
@@ -723,6 +840,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
             : (maxP > 0.4 ? 'Some pressure' : 'Comfortable supply'));
 
     final hasNoData = [...grains, ...categories].any((e) => _isNoData(e.value));
+    final provenanceLines = _buildProvenanceLines(provenance);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -835,6 +953,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
               ),
             ),
           ],
+          if (provenanceLines != null) provenanceLines,
         ],
       ),
     );

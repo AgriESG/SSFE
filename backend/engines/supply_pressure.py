@@ -397,10 +397,14 @@ def get_supply_pressure_index() -> dict:
             'cereals': 0.47,
             'eggs': 0.58
         },
-        'data_vintage': '2024/25',
+        'data_vintage': '2024/25–2025/26',
         'measures_used': {
-            'Wheat':  {'stocks': 'free stock', 'demand': 'domestic consumption + exports'},
-            'Oats':   {'stocks': 'commercial end-season stocks', 'demand': 'domestic consumption only'}
+            'Wheat': {'stocks': 'free stock',
+                      'demand': 'domestic consumption + exports',
+                      'vintage': '2025/26'},
+            'Oats':  {'stocks': 'commercial end-season stocks',
+                      'demand': 'domestic consumption only',
+                      'vintage': '2024/25'}
         }
     }
     """
@@ -410,19 +414,44 @@ def get_supply_pressure_index() -> dict:
 
     # Extract balance sheets and calculate grain pressure
     grain_pressures = {}
-    data_vintage = None
-
     measures_used = {}
+    vintages = []
 
     for grain in GRAINS:
         balance_sheet, measures = extract_balance_sheet(raw_data[grain])
         grain_pressures[grain] = calculate_grain_pressure(balance_sheet)
-        measures_used[grain] = measures
 
-        # Capture most recent crop year for transparency
+        # Latest season this grain actually has a computable ratio for. Grains
+        # do not move in step: AHDB publishes the oats stock figure later than
+        # wheat and barley, so oats currently lags one season behind.
         valid_years = balance_sheet['stock_to_use'].dropna().index.tolist()
-        if valid_years:
-            data_vintage = str(valid_years[-1])
+        grain_vintage = str(valid_years[-1]) if valid_years else None
+        measures['vintage'] = grain_vintage
+        # How many seasons the percentile rank is measured against. Grains
+        # differ: free stock starts later than commercial stocks, so oats has
+        # a longer run than wheat and barley despite lagging by a season.
+        measures['seasons'] = len(valid_years)
+        measures_used[grain] = measures
+        if grain_vintage:
+            vintages.append(grain_vintage)
+
+    # Report the span, not one grain's value.
+    #
+    # An earlier version simply let the loop variable survive, so the whole
+    # index was labelled with whichever grain happened to be iterated last.
+    # Oats is last in GRAINS and lags a season, so the index reported the
+    # OLDEST vintage by accident of ordering while discarding the current
+    # readings for wheat and barley.
+    #
+    # Reporting only the newest would be the opposite error: it would imply
+    # oats is current when it is not. Crop years sort correctly as strings
+    # because the starting year is four digits.
+    if not vintages:
+        data_vintage = None
+    elif min(vintages) == max(vintages):
+        data_vintage = min(vintages)
+    else:
+        data_vintage = f'{min(vintages)}–{max(vintages)}'
 
     # Map to food categories
     food_category_pressure = calculate_food_category_pressure(grain_pressures)
@@ -450,7 +479,7 @@ if __name__ == "__main__":
     for grain, score in result['grain_pressure'].items():
         bar = '█' * int(score * 20)
         m = result['measures_used'].get(grain, {})
-        note = f"  [{m.get('stocks', '?')} / {m.get('demand', '?')}]"
+        note = f"  [{m.get('stocks', '?')} / {m.get('demand', '?')}, {m.get('vintage', '?')}]"
         if score == 0.5:
             note += '  (neutral default — insufficient data)'
         print(f"  {grain:<8} {score:.3f}  {bar}{note}")

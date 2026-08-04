@@ -1,7 +1,47 @@
 """
 AgriESG — FastAPI Backend
 Food Optimisation Engine API
-Version: 0.3.2
+Version: 0.3.5
+
+WHAT CHANGED FROM 0.3.4:
+--------------------------
+supply_exposure replaced by crop_provenance.
+
+  supply_exposure ranked the user's categories by pressure, which produced
+  circular statements: "bread is the tightest category in your basket, and
+  your bread depends on it". The category IS the food type, so naming it says
+  nothing. Worse, it manufactured a ranking out of readings that were all
+  comfortable — wheat at the 49th percentile of its own history is sitting on
+  its median, and calling that "tightest" is true but misleading.
+
+  crop_provenance traces the other direction: which UK crops the basket rests
+  on, separating direct consumption from animal feed. Almost nobody buying
+  chicken thinks of it as a wheat product, and FOOD_CATEGORY_WEIGHTS already
+  encodes that poultry feed is ~60% wheat and beef feed ~30% barley. That is
+  the genuinely non-obvious farm-to-shelf link, and unlike a pressure ranking
+  it is interesting on an ordinary season when nothing is tight.
+
+  Still not a forecast. The validated lead-lag work covers protein feed to pig
+  farm-gate (20-26 weeks) and farm-gate to retail (6-10 weeks). Nothing links
+  cereal balance-sheet stocks to shelf prices at any horizon.
+
+WHAT CHANGED FROM 0.3.3:
+--------------------------
+
+WHAT CHANGED FROM 0.3.2:
+--------------------------
+Substitutions now carry real physical units alongside the score deltas.
+
+  env_delta and cost_delta are 0-100 normalised scores, which is what the
+  optimiser ranks on. The app was rendering them with "kg CO2" and "£"
+  labels, so a swap reported as "-58.9 kg CO2" was actually 58.9
+  environment POINTS, and "-£36.95" was 36.95 cost points. The numbers were
+  right; the units were fiction.
+
+  carbon_delta_kg_per_kg and cost_delta_gbp_per_kg are added, computed from
+  the Carbon column and best_price_per_kg. Per kilogram of product, because
+  that is the basis on which two foods are comparable and it does not depend
+  on how much of either the shopper buys.
 
 WHAT CHANGED FROM 0.3.1:
 --------------------------
@@ -79,7 +119,10 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from services.data_loader import load_food_data
-from engines.supply_pressure import get_supply_pressure_index
+from engines.supply_pressure import (
+    get_supply_pressure_index,
+    FOOD_CATEGORY_WEIGHTS,
+)
 from engines.pareto_optimiser import optimise_substitutions
 from engines.behavioural_realism import filter_by_realism
 from engines.feed_cost_pressure import (
@@ -97,7 +140,7 @@ from api.metrics import RequestCounterMiddleware, router as metrics_router, _pip
 app = FastAPI(
     title="AgriESG Food Optimisation API",
     description="Multi-objective food basket optimisation: cost, nutrition, environment, supply stability.",
-    version="0.3.2",
+    version="0.3.5",
 )
 
 app.add_middleware(
@@ -460,7 +503,7 @@ class FoodSearchRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "AgriESG Food Optimisation API", "version": "0.3.2"}
+    return {"message": "AgriESG Food Optimisation API", "version": "0.3.5"}
 
 
 @app.get("/health")
@@ -716,6 +759,23 @@ def optimise_basket(request: BasketRequest):
         # Backward compatible fields preserved from v0.2.0
         # New fields added: pareto_rank, supply_stability, preference_score,
         # realism_score, pareto_front_size, weights_applied
+        # Physical deltas, per kilogram of product. Recomputed here from the
+        # two food rows rather than carried through the optimiser, so they
+        # cannot silently go missing if the candidate dicts are rebuilt
+        # somewhere in the pipeline.
+        best_row, best_price = get_food_by_id(str(best_sub_id))
+        carbon_delta_kg = None
+        cost_delta_gbp = None
+        if best_row is not None:
+            try:
+                carbon_delta_kg = round(
+                    float(orig_row["Carbon"]) - float(best_row["Carbon"]), 3
+                )
+            except (TypeError, ValueError, KeyError):
+                carbon_delta_kg = None
+            if orig_price is not None and best_price is not None:
+                cost_delta_gbp = round(float(orig_price) - float(best_price), 2)
+
         sub_entry = {
             # ── v0.2.0 fields (unchanged) ──
             "original_id":      str(fid),
@@ -743,12 +803,101 @@ def optimise_basket(request: BasketRequest):
             "original_supply_category":   orig_supply_category,
             "substitute_supply_category": best.get("food_category"),
             "supply_influenced_rationale": supply_clause is not None,
+            # ── v0.3.3 new fields ──
+            # Real units, per kg of product. env_delta and cost_delta above
+            # remain the normalised scores the optimiser ranks on; these two
+            # are what a person can actually act on. Null where the underlying
+            # figure is missing, so the client shows nothing rather than a
+            # fabricated zero.
+            "carbon_delta_kg_per_kg": carbon_delta_kg,
+            "cost_delta_gbp_per_kg":  cost_delta_gbp,
         }
 
         substitutions.append(sub_entry)
 
     # Sort by preference score descending
     substitutions.sort(key=lambda x: x["preference_score"], reverse=True)
+
+    # ── Crop provenance ─────────────────────────────────────────────────────
+    # Which UK crops this basket actually rests on, split by whether the grain
+    # is eaten directly or arrives through animal feed. The feed route is the
+    # non-obvious half: FOOD_CATEGORY_WEIGHTS puts poultry rations at ~60%
+    # wheat and beef at ~30% barley, so a chicken is, in supply terms, largely
+    # a wheat product.
+    #
+    # No ranking and no forecast. A ranking over comfortable readings invents
+    # significance, and there is no tested link from cereal stocks to shelf
+    # prices to forecast from.
+    DIRECT_CATEGORIES = {"bread", "cereals"}
+
+    # A grain counts as being behind a category when it is at least this much
+    # of that category's mapping. Below it the grain is a trace contributor and
+    # naming it would overstate the connection.
+    PROVENANCE_THRESHOLD = 0.20
+
+    cat_pressure = _supply_pressure.get("food_category_pressure", {}) or {}
+    grain_pressure = _supply_pressure.get("grain_pressure", {}) or {}
+    measures = _supply_pressure.get("measures_used", {}) or {}
+
+    # Basket foods grouped by supply category.
+    foods_by_category: dict[str, list[str]] = {}
+    for fid in resolved_ids:
+        row, _ = get_food_by_id(fid)
+        if row is None:
+            continue
+        category = get_supply_category(row)
+        if category == UNMAPPED_SUPPLY_CATEGORY:
+            continue
+        foods_by_category.setdefault(category, []).append(str(row["Food_name"]))
+
+    def _state(pressure: Optional[float]) -> str:
+        """
+        Plain-language reading of a percentile-based pressure score. Bands are
+        deliberately wide: these are ranks within a grain's own history, and a
+        score near 0.5 means the season is unremarkable, not that it is tight.
+        """
+        if pressure is None:
+            return "no data"
+        if pressure < 0.35:
+            return "comfortably stocked"
+        if pressure <= 0.65:
+            return "near its long-run average"
+        return "tighter than usual"
+
+    provenance = []
+    for grain, weights_by_cat in (
+        (g, {c: w.get(g, 0.0) for c, w in FOOD_CATEGORY_WEIGHTS.items()})
+        for g in grain_pressure
+    ):
+        direct, via_feed = [], []
+        for category, weight in weights_by_cat.items():
+            if weight < PROVENANCE_THRESHOLD:
+                continue
+            names = foods_by_category.get(category, [])
+            if not names:
+                continue
+            (direct if category in DIRECT_CATEGORIES else via_feed).extend(names)
+
+        if not direct and not via_feed:
+            continue
+
+        p = grain_pressure.get(grain)
+        p = float(p) if p is not None else None
+        has_data = p is not None and abs(p - NEUTRAL_PRESSURE) >= NEUTRAL_EPSILON
+
+        provenance.append({
+            "grain": grain,
+            "pressure": round(p, 4) if has_data else None,
+            "state": _state(p if has_data else None),
+            "seasons": measures.get(grain, {}).get("seasons"),
+            "vintage": measures.get(grain, {}).get("vintage"),
+            "direct_foods": sorted(set(direct)),
+            "feed_foods": sorted(set(via_feed)),
+        })
+
+    # Tightest first so anything genuinely under pressure leads, but the
+    # frontend states this as provenance, not as a ranking.
+    provenance.sort(key=lambda g: g["pressure"] or 0.0, reverse=True)
 
     after_summary = basket_summary(score_basket(optimised_ids))
 
@@ -779,15 +928,19 @@ def optimise_basket(request: BasketRequest):
         "supply_influenced_count": sum(
             1 for s in substitutions if s.get("supply_influenced_rationale")
         ),
-        # ── v0.3.2 new field ──
-        # Second pressure component, kept separate from supply_pressure_index
-        # because it has a different data source, a different horizon and a
-        # different validation status. Null for every category except pork.
-        "feed_cost_pressure": {
-            c: current_feed_pressure(_feed_series, c)
-            for c in sorted(FEED_VALIDATED_CATEGORIES)
+        # ── v0.3.5 new field ──
+        # Which UK crops the basket rests on, direct and via animal feed.
+        # Replaces supply_exposure, which ranked categories by pressure and
+        # produced circular statements. Contains no forecast.
+        "crop_provenance": {
+            "grains": provenance,
+            "any_tight": any(
+                (g["pressure"] or 0.0) > 0.65 for g in provenance
+            ),
+            "basket_items_traced": sum(len(v) for v in foods_by_category.values()),
+            "basket_items_total": len(resolved_ids),
         },
-        "engine_version": "0.3.2",
+        "engine_version": "0.3.5",
     }
 
 
