@@ -189,8 +189,15 @@ class SubstitutionCard extends StatelessWidget {
   final String replacementName;
   final String replacementEmoji;
   final String reason;
-  final double carbonSaved;
-  final double costSaved;
+
+  /// Real deltas per kilogram of product, or null when the underlying figure
+  /// is missing. These are NOT the optimiser's score deltas: those are 0-100
+  /// normalised values, and an earlier version rendered them with "kg CO2" and
+  /// "£" labels, so a swap shown as "-58.9 kg CO2" was really 58.9 environment
+  /// points. A chip that names a unit the number does not have is worse than
+  /// no chip, so null means nothing is drawn.
+  final double? carbonSaved;
+  final double? costSaved;
   final double? supplyStability;
   final double? realismScore;
   final int? paretoRank;
@@ -203,8 +210,8 @@ class SubstitutionCard extends StatelessWidget {
     required this.replacementName,
     required this.replacementEmoji,
     required this.reason,
-    required this.carbonSaved,
-    required this.costSaved,
+    this.carbonSaved,
+    this.costSaved,
     this.supplyStability,
     this.realismScore,
     this.paretoRank,
@@ -276,17 +283,19 @@ class SubstitutionCard extends StatelessWidget {
     // invisible.
     final chips = <Widget>[];
 
-    if (carbonSaved.abs() >= _carbonBand) {
+    final carbon = carbonSaved;
+    if (carbon != null && carbon.abs() >= _carbonBand) {
       chips.add(_savingsChip(
-        '${carbonSaved > 0 ? "−" : "+"}'
-        '${carbonSaved.abs().toStringAsFixed(1)} kg CO₂',
-        carbonSaved > 0 ? AppColors.carbonColor : AppColors.warning,
+        '${carbon > 0 ? "−" : "+"}'
+        '${carbon.abs().toStringAsFixed(1)} kg CO₂/kg',
+        carbon > 0 ? AppColors.carbonColor : AppColors.warning,
       ));
     }
-    if (costSaved.abs() >= _costBand) {
+    final cost = costSaved;
+    if (cost != null && cost.abs() >= _costBand) {
       chips.add(_savingsChip(
-        '${costSaved > 0 ? "−" : "+"}£${costSaved.abs().toStringAsFixed(2)}',
-        costSaved > 0 ? AppColors.costColor : AppColors.warning,
+        '${cost > 0 ? "−" : "+"}£${cost.abs().toStringAsFixed(2)}/kg',
+        cost > 0 ? AppColors.costColor : AppColors.warning,
       ));
     }
     final supply = _supplyChip();
