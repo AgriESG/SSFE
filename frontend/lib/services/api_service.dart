@@ -117,6 +117,47 @@ class ApiFeedCostPressure {
       );
 }
 
+/// Response from GET /feed-cost-pressure. `explanations` carries the exact
+/// one-line, plain-English readout the backend already generates
+/// (engines/feed_cost_pressure.py::describe_pressure) — the frontend
+/// displays it rather than re-deriving it, so the wording in the app can
+/// never drift from the wording the validation record actually supports.
+class FeedCostOutlook {
+  final Map<String, ApiFeedCostPressure> pressures;
+  final Map<String, String> explanations;
+  final List<String> validatedCategories;
+  final List<String> untestedCategories;
+  final String note;
+
+  FeedCostOutlook({
+    required this.pressures,
+    required this.explanations,
+    required this.validatedCategories,
+    required this.untestedCategories,
+    required this.note,
+  });
+
+  factory FeedCostOutlook.fromJson(Map<String, dynamic> j) {
+    final rawPressures = j['feed_cost_pressure'] as Map<String, dynamic>? ?? {};
+    final pressures = <String, ApiFeedCostPressure>{};
+    rawPressures.forEach((key, value) {
+      if (value is Map<String, dynamic>) {
+        pressures[key] = ApiFeedCostPressure.fromJson(value);
+      }
+    });
+    final rawExplanations = j['explanations'] as Map<String, dynamic>? ?? {};
+    return FeedCostOutlook(
+      pressures: pressures,
+      explanations: rawExplanations.map((k, v) => MapEntry(k, v.toString())),
+      validatedCategories:
+          (j['validated_categories'] as List? ?? []).map((e) => e.toString()).toList(),
+      untestedCategories:
+          (j['untested_categories'] as List? ?? []).map((e) => e.toString()).toList(),
+      note: (j['note'] ?? '').toString(),
+    );
+  }
+}
+
 /// Which UK crops the basket rests on, direct and through animal feed.
 ///
 /// Replaces an earlier "exposure" model that ranked the user's categories by
@@ -556,6 +597,29 @@ class ApiService {
   }
 
   // -------------------------------------------------------------------------
+  // Feed cost pressure — forward-looking price signal
+  //
+  // Standalone, basket-independent: unlike the Supply Pressure Index (how
+  // tight stock is right now), this is the one signal in the system with a
+  // stated lead time between a reading today and a price effect later
+  // (engines/feed_cost_pressure.py). Validated for pork only — every other
+  // category is absent from the response by design, not defaulted to zero.
+  // -------------------------------------------------------------------------
+
+  static Future<FeedCostOutlook> getFeedCostPressure() async {
+    final res = await _client
+        .get(
+          Uri.parse('${ApiConfig.baseUrl}/feed-cost-pressure'),
+          headers: _headers,
+        )
+        .timeout(ApiConfig.standard);
+
+    _checkStatus(res);
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return FeedCostOutlook.fromJson(data);
+  }
+
+  // -------------------------------------------------------------------------
   // Swap feedback telemetry
   //
   // Records whether a suggested substitution was accepted or dismissed.
@@ -618,9 +682,16 @@ class ApiService {
   // change of 0.1 produced "Nutrition score up 0 pts", which asserts a benefit
   // the number does not support.
   //
-  // Regressions get a line too. A basket that came out pricier should say so
-  // rather than staying silent and letting the reader assume everything
-  // improved.
+  // Cost and environment intentionally have no line here. The results screen
+  // already states the real £ and kg CO2 change of the basket the user is
+  // actually looking at (OptimisedBasketScreen._costLine / _carbonLine),
+  // computed live from the current, revert-aware basket. This method only
+  // sees the API's fixed-at-response-time 0-100 score deltas, which can move
+  // in the opposite direction to the real total (a different currency
+  // entirely — see ApiSubstitution.carbonDeltaKgPerKg) and never update when
+  // the user reverts a swap. Printing "Cost score rose — this basket is
+  // pricier" next to a banner that (correctly) says the basket got cheaper
+  // was confusing testers, not helping them.
   // -------------------------------------------------------------------------
 
   static List<String> _generateInsights(
@@ -628,31 +699,6 @@ class ApiService {
     List<ApiSubstitution> substitutions,
   ) {
     final insights = <String>[];
-
-    if (comparison.envReduction >= _noiseBand) {
-      insights.add(
-        '🌱 Environmental impact reduced by '
-        '${comparison.envReduction.toStringAsFixed(0)} pts',
-      );
-    } else if (comparison.envReduction <= -_noiseBand) {
-      insights.add(
-        '🌍 Environmental impact rose by '
-        '${comparison.envReduction.abs().toStringAsFixed(0)} pts with these swaps',
-      );
-    }
-
-    if (comparison.costReduction >= _noiseBand) {
-      insights.add(
-        '💰 Cost score improved by '
-        '${comparison.costReduction.toStringAsFixed(0)} pts',
-      );
-    } else if (comparison.costReduction <= -_noiseBand) {
-      insights.add(
-        '💷 Cost score rose by '
-        '${comparison.costReduction.abs().toStringAsFixed(0)} pts — '
-        'this basket is pricier',
-      );
-    }
 
     if (comparison.nutritionGain >= _noiseBand) {
       insights.add(

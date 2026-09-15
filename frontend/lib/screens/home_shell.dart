@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/user_preferences.dart';
+import '../services/api_service.dart';
+import '../widgets/price_outlook_card.dart';
 import 'basket_input_screen.dart';
 import 'history_screen.dart';
 import 'preferences_screen.dart';
@@ -18,6 +20,35 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
+  final _historyKey = GlobalKey<HistoryScreenState>();
+
+  // Basket-independent — a standing UK market signal, not something that
+  // needs a basket to exist — so it loads as soon as the app opens rather
+  // than waiting for the user to build anything.
+  FeedCostOutlook? _feedOutlook;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFeedOutlook();
+  }
+
+  Future<void> _loadFeedOutlook() async {
+    try {
+      final outlook = await ApiService.getFeedCostPressure();
+      if (mounted) setState(() => _feedOutlook = outlook);
+    } catch (_) {
+      // No card rather than an error state on the home screen.
+    }
+  }
+
+  void _selectTab(int index) {
+    setState(() => _currentIndex = index);
+    // History lives in an IndexedStack, which keeps it mounted rather than
+    // rebuilding it, so it needs an explicit nudge to pick up any basket
+    // analysed since the last time this tab was visible.
+    if (index == 2) _historyKey.currentState?.reload();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +58,7 @@ class _HomeShellState extends State<HomeShell> {
         children: [
           _buildHomeTab(),
           BasketInputScreen(preferences: widget.preferences),
-          const HistoryScreen(),
+          HistoryScreen(key: _historyKey),
           _buildProfileTab(),
         ],
       ),
@@ -64,7 +95,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _navItem(int index, List<List<dynamic>> icon, String label) {
     final isActive = _currentIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () => _selectTab(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -103,16 +134,6 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: const Text('AgriESG'),
         centerTitle: false,
-        actions: [
-          IconButton(
-            icon: HugeIcon(
-              icon: HugeIcons.strokeRoundedNotification01,
-              color: AppColors.textSecondary,
-              size: 22,
-            ),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -144,6 +165,7 @@ class _HomeShellState extends State<HomeShell> {
                   const Text(
                     'Ready to optimise\nyour grocery basket?',
                     style: TextStyle(
+                      fontFamily: AppFonts.heading,
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,
@@ -186,11 +208,19 @@ class _HomeShellState extends State<HomeShell> {
                 ],
               ),
             ),
+            if (_feedOutlook != null && _feedOutlook!.pressures.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              PriceOutlookTeaser(
+                outlook: _feedOutlook!,
+                onTap: () => _selectTab(1),
+              ),
+            ],
             const SizedBox(height: 28),
 
             const Text(
               'Your Profile',
               style: TextStyle(
+                fontFamily: AppFonts.heading,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
@@ -203,6 +233,7 @@ class _HomeShellState extends State<HomeShell> {
             const Text(
               'Quick Actions',
               style: TextStyle(
+                fontFamily: AppFonts.heading,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
@@ -235,6 +266,7 @@ class _HomeShellState extends State<HomeShell> {
             const Text(
               'Sustainability Tip',
               style: TextStyle(
+                fontFamily: AppFonts.heading,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
@@ -307,6 +339,10 @@ class _HomeShellState extends State<HomeShell> {
           _profileRow('Nutrition', p.nutritionGoalLabel),
           _profileRow('Household',
               '${p.householdSize} ${p.householdSize == 1 ? "person" : "people"}'),
+          if (p.allergies.isNotEmpty)
+            _profileRow('Allergies', p.allergies.join(', ')),
+          if (p.dislikes.isNotEmpty)
+            _profileRow('Dislikes', p.dislikes.join(', ')),
         ],
       ),
     );
@@ -442,14 +478,14 @@ class _HomeShellState extends State<HomeShell> {
               HugeIcons.strokeRoundedClock01,
               'History',
               'View past basket analyses',
-              () => setState(() => _currentIndex = 2),
+              () => _selectTab(2),
             ),
             const SizedBox(height: 12),
             _profileTile(
               HugeIcons.strokeRoundedInformationCircle,
               'About AgriESG',
               'Version 0.1.0',
-              () {},
+              () => _showAboutDialog(context),
             ),
             const SizedBox(height: 28),
             Container(
@@ -487,6 +523,32 @@ class _HomeShellState extends State<HomeShell> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showAboutDialog(BuildContext context) {
+    showAboutDialog(
+      context: context,
+      applicationName: 'AgriESG',
+      applicationVersion: 'Version 0.1.0',
+      applicationIcon: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text('🌱', style: TextStyle(fontSize: 24)),
+      ),
+      applicationLegalese: 'AgriESG Limited, company number 16901352.',
+      children: const [
+        SizedBox(height: 16),
+        Text(
+          'A food optimisation engine that suggests grocery substitutions '
+          'across cost, nutrition, environmental footprint, and UK supply '
+          'stability.',
+          style: TextStyle(height: 1.4),
+        ),
+      ],
     );
   }
 

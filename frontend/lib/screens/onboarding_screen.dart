@@ -3,6 +3,7 @@ import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/user_preferences.dart';
 import '../widgets/adaptive_widgets.dart';
+import '../services/preferences_store.dart';
 import 'home_shell.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   final _allergyOptions = [
     'Dairy',
+    'Lactose Intolerant',
     'Gluten',
     'Nuts',
     'Soy',
@@ -72,6 +74,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _navigateToBasketInput() {
+    PreferencesStore.save(_preferences);
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => HomeShell(preferences: _preferences),
@@ -185,6 +188,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           const Text(
             'What\'s your\ndiet type?',
             style: TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 32,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -318,6 +322,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           const Text(
             'Any allergies\nor dislikes?',
             style: TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 32,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -424,6 +429,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         const Text(
           'Set your\npriorities',
           style: TextStyle(
+            fontFamily: AppFonts.heading,
             fontSize: 32,
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
@@ -609,6 +615,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           const Text(
             'Household\nsize',
             style: TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 32,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -634,7 +641,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     end: _preferences.householdSize.toDouble(),
                   ),
                   duration: const Duration(milliseconds: 300),
-                  builder: (_, value, __) {
+                  builder: (_, value, _) {
                     return Text(
                       value.round().toString(),
                       style: const TextStyle(

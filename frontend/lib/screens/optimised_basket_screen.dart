@@ -2,20 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/food_item.dart';
+import '../models/history_entry.dart';
 import '../models/user_preferences.dart';
 import '../services/api_service.dart';
+import '../services/history_store.dart';
+import '../services/preferences_store.dart';
 import '../widgets/adaptive_widgets.dart';
+import '../widgets/price_outlook_card.dart';
 import 'savings_impact_screen.dart';
 import 'swap_detail_screen.dart';
 
 class OptimisedBasketScreen extends StatefulWidget {
   final List<FoodItem> originalBasket;
   final UserPreferences preferences;
+  final String? historyEntryId;
 
   const OptimisedBasketScreen({
     super.key,
     required this.originalBasket,
     required this.preferences,
+    this.historyEntryId,
   });
 
   @override
@@ -28,11 +34,16 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
   bool _isOptimising = true;
   String? _errorMessage;
 
-  // Substitutions the user chose to revert, keyed by originalId.
-  // The API returns a basket with every suggested swap already applied, so
-  // "Keep Original" is a revert and "Accept This Swap" is a no-op or an undo
-  // of a previous revert.
-  final Set<String> _revertedIds = {};
+  // Independent of the optimisation call and allowed to fail silently: this
+  // is a bonus signal, not something the rest of the screen depends on.
+  FeedCostOutlook? _feedOutlook;
+
+  // Substitutions the user has explicitly accepted, keyed by originalId.
+  // The API returns every suggested swap ranked and ready, but applying them
+  // to the basket before the user has looked at a single one read as the app
+  // silently changing their shopping list on its own. Nothing is applied
+  // until "Accept This Swap" is tapped; "Keep Original" undoes an acceptance.
+  final Set<String> _acceptedIds = {};
 
   // ---------------------------------------------------------------------------
   // Display thresholds.
@@ -60,6 +71,18 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
       curve: Curves.easeOutCubic,
     );
     _runOptimisation();
+    _loadFeedOutlook();
+  }
+
+  Future<void> _loadFeedOutlook() async {
+    try {
+      final outlook = await ApiService.getFeedCostPressure();
+      if (mounted) setState(() => _feedOutlook = outlook);
+    } catch (_) {
+      // No outlook card rather than an error state — this section is a
+      // bonus on top of the swap suggestions, not a thing worth blocking or
+      // retrying for.
+    }
   }
 
   Future<void> _runOptimisation() async {
@@ -94,7 +117,10 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
     if (_result == null) return;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SavingsImpactScreen(result: _result!),
+        builder: (_) => SavingsImpactScreen(
+          result: _result!,
+          preferences: widget.preferences,
+        ),
       ),
     );
   }
@@ -141,6 +167,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
           const Text(
             'Working out your swaps...',
             style: TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 20,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -180,14 +207,15 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             HugeIcon(
-              icon: HugeIcons.strokeRoundedAlert02,
-              color: AppColors.error,
-              size: 48,
+              icon: HugeIcons.strokeRoundedCloudLoading,
+              color: AppColors.warning,
+              size: 40,
             ),
             const SizedBox(height: 20),
             const Text(
-              'Something went wrong',
+              "Couldn't optimise your basket",
               style: TextStyle(
+                fontFamily: AppFonts.heading,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary,
@@ -222,16 +250,17 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // Basket as currently displayed: reverted swaps show the original item again.
+  // Basket as currently displayed: starts as the original basket untouched,
+  // and only shows a substitute once its swap has been accepted.
   // ---------------------------------------------------------------------------
 
   List<FoodItem> get _displayBasket {
     final result = _result!;
-    return result.optimisedBasket.map((item) {
+    return widget.originalBasket.map((item) {
       for (final s in result.substitutions) {
-        if (s.substituteId == item.id && _revertedIds.contains(s.originalId)) {
-          for (final o in widget.originalBasket) {
-            if (o.id == s.originalId) return o;
+        if (s.originalId == item.id && _acceptedIds.contains(s.originalId)) {
+          for (final o in result.optimisedBasket) {
+            if (o.id == s.substituteId) return o.copyWith(quantity: item.quantity);
           }
         }
       }
@@ -244,8 +273,9 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
   //
   // Computed from the basket the user is actually looking at, not from the
   // comparison the API returned. Those two diverge the moment a swap is
-  // reverted: the API figures are fixed at response time, so a reverted swap
-  // used to leave the banner claiming savings the basket no longer delivered.
+  // accepted or undone: the API figures are fixed at response time and assume
+  // every swap is taken, so they used to claim savings the basket didn't
+  // actually deliver until the user had accepted anything at all.
   // ---------------------------------------------------------------------------
 
   double get _originalCost =>
@@ -261,8 +291,35 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
   double get _carbonSaved => _originalCarbon - _currentCarbon;
 
   int get _activeSwaps => _result!.substitutions
-      .where((s) => !_revertedIds.contains(s.originalId))
+      .where((s) => _acceptedIds.contains(s.originalId))
       .length;
+
+  // Keeps the History row this basket started from up to date with the
+  // savings actually realised, not the savings on offer. Fire-and-forget:
+  // this is a local write and nothing in the UI depends on its completion.
+  // Reads the existing row first so the original analysis timestamp is
+  // preserved rather than bumped to "now" on every swap toggle.
+  Future<void> _syncHistory() async {
+    final id = widget.historyEntryId;
+    if (id == null) return;
+    final entries = await HistoryStore.load();
+    final matches = entries.where((e) => e.id == id);
+    final base = matches.isNotEmpty
+        ? matches.first
+        : HistoryEntry(
+          id: id,
+          timestamp: DateTime.now(),
+          itemCount: widget.originalBasket.length,
+          itemNames: widget.originalBasket.map((i) => i.name).toList(),
+          totalCost: _originalCost,
+          totalCarbon: _originalCarbon,
+        );
+    await HistoryStore.upsert(base.copyWith(
+      swapsAccepted: _activeSwaps,
+      costSaved: _costSaved,
+      carbonSaved: _carbonSaved,
+    ));
+  }
 
   // Direction, not just movement. An earlier version asked only whether
   // anything had changed, so a basket that came out worse on both axes still
@@ -288,6 +345,17 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
     if (_carbonSaved.abs() < _carbonBand) return 'Same carbon';
     final amount = '${_carbonSaved.abs().toStringAsFixed(1)} kg';
     return _carbonSaved > 0 ? '$amount less' : '$amount more';
+  }
+
+  bool get _isDetailed =>
+      widget.preferences.detailLevel == DetailLevel.detailed;
+
+  void _toggleDetailLevel() {
+    setState(() {
+      widget.preferences.detailLevel =
+          _isDetailed ? DetailLevel.simple : DetailLevel.detailed;
+    });
+    PreferencesStore.save(widget.preferences);
   }
 
   // ---------------------------------------------------------------------------
@@ -321,6 +389,10 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
                 result.supplyPressure!,
                 result.cropProvenance,
               ),
+            if (_feedOutlook != null && _feedOutlook!.pressures.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              PriceOutlookCard(outlook: _feedOutlook!, isDetailed: _isDetailed),
+            ],
             const SizedBox(height: 24),
             if (meaningful.isNotEmpty) ...[
               SectionHeader(
@@ -354,7 +426,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
               final wasSubstituted = result.substitutions.any(
                 (s) =>
                     s.substituteId == item.id &&
-                    !_revertedIds.contains(s.originalId),
+                    _acceptedIds.contains(s.originalId),
               );
               return _buildOptimisedItemTile(item, wasSubstituted);
             }),
@@ -393,17 +465,21 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
       onTap: () async {
         final accepted = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
-            builder: (_) => SwapDetailScreen(substitution: s),
+            builder: (_) => SwapDetailScreen(
+              substitution: s,
+              preferences: widget.preferences,
+            ),
           ),
         );
         if (!mounted) return;
         setState(() {
-          if (accepted == false) {
-            _revertedIds.add(s.originalId);
-          } else if (accepted == true) {
-            _revertedIds.remove(s.originalId);
+          if (accepted == true) {
+            _acceptedIds.add(s.originalId);
+          } else if (accepted == false) {
+            _acceptedIds.remove(s.originalId);
           }
         });
+        if (accepted != null) _syncHistory();
       },
       child: SubstitutionCard(
         originalName: s.originalName,
@@ -417,6 +493,8 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
         realismScore: s.realismScore,
         paretoRank: s.paretoRank,
         isLowRealism: s.humanFlaggedLowRealism,
+        showRank: _isDetailed,
+        accepted: _acceptedIds.contains(s.originalId),
       ),
     );
   }
@@ -506,6 +584,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
           Text(
             headline,
             style: const TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -810,6 +889,7 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
     );
   }
 
+
   Widget _buildSupplyPressureBanner(
     ApiSupplyPressure pressure,
     ApiCropProvenance? provenance,
@@ -862,7 +942,11 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
               const SizedBox(width: 10),
               const Text(
                 'UK Supply Outlook',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontFamily: AppFonts.heading,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const Spacer(),
               Container(
@@ -889,71 +973,99 @@ class _OptimisedBasketScreenState extends State<OptimisedBasketScreen>
             'tends to feed through to shelf prices later.',
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Grains',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
+          if (_isDetailed) ...[
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Grains',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...grains.map((e) => _pressureRow(e.key, e.value)),
-                  ],
+                      const SizedBox(height: 8),
+                      ...grains.map((e) => _pressureRow(e.key, e.value)),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Food categories',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Food categories',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...categories.map((e) => _pressureRow(e.key, e.value)),
-                  ],
+                      const SizedBox(height: 8),
+                      ...categories.map((e) => _pressureRow(e.key, e.value)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (pressure.dataVintage.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                'AHDB balance sheets, ${pressure.dataVintage}.',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textTertiary,
+                  fontStyle: FontStyle.italic,
                 ),
               ),
             ],
+            if (hasNoData) ...[
+              const SizedBox(height: 4),
+              const Text(
+                'No data: no stock figures are published for that commodity, '
+                'so it is treated neutrally rather than penalised.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textTertiary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+            ?provenanceLines,
+          ],
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _toggleDetailLevel,
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _isDetailed ? 'Show less' : 'Show grain & crop breakdown',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                HugeIcon(
+                  icon: _isDetailed
+                      ? HugeIcons.strokeRoundedArrowUp01
+                      : HugeIcons.strokeRoundedArrowDown01,
+                  color: AppColors.primary,
+                  size: 14,
+                ),
+              ],
+            ),
           ),
-          if (pressure.dataVintage.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              'AHDB balance sheets, ${pressure.dataVintage}.',
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textTertiary,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-          if (hasNoData) ...[
-            const SizedBox(height: 4),
-            const Text(
-              'No data: no stock figures are published for that commodity, so '
-              'it is treated neutrally rather than penalised.',
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.textTertiary,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-          if (provenanceLines != null) provenanceLines,
         ],
       ),
     );

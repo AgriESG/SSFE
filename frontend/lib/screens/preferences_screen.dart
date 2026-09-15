@@ -3,6 +3,7 @@ import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/user_preferences.dart';
 import '../widgets/adaptive_widgets.dart';
+import '../services/preferences_store.dart';
 
 class PreferencesScreen extends StatefulWidget {
   final UserPreferences preferences;
@@ -22,6 +23,7 @@ class _PreferencesScreenState extends State<PreferencesScreen>
 
   final _allergyOptions = [
     'Dairy',
+    'Lactose Intolerant',
     'Gluten',
     'Nuts',
     'Soy',
@@ -52,6 +54,7 @@ class _PreferencesScreenState extends State<PreferencesScreen>
       sustainabilityPriority: widget.preferences.sustainabilityPriority,
       nutritionGoal: widget.preferences.nutritionGoal,
       householdSize: widget.preferences.householdSize,
+      detailLevel: widget.preferences.detailLevel,
     );
     _animController = AnimationController(
       duration: const Duration(milliseconds: 600),
@@ -83,6 +86,8 @@ class _PreferencesScreenState extends State<PreferencesScreen>
     widget.preferences.sustainabilityPriority = _prefs.sustainabilityPriority;
     widget.preferences.nutritionGoal = _prefs.nutritionGoal;
     widget.preferences.householdSize = _prefs.householdSize;
+    widget.preferences.detailLevel = _prefs.detailLevel;
+    PreferencesStore.save(widget.preferences);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -182,6 +187,24 @@ class _PreferencesScreenState extends State<PreferencesScreen>
               _buildHouseholdStepper(),
               const SizedBox(height: 24),
 
+              _buildSectionTitle('🔍', 'Insight Detail'),
+              const SizedBox(height: 4),
+              const Text(
+                'How much depth to show for UK supply and optimiser data.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              _buildSegmentedSelector<DetailLevel>(
+                DetailLevel.values,
+                _prefs.detailLevel,
+                (v) {
+                  setState(() => _prefs.detailLevel = v);
+                  _markChanged();
+                },
+                ['Simple', 'Detailed'],
+              ),
+              const SizedBox(height: 24),
+
               _buildSectionTitle('⚠️', 'Allergies'),
               const SizedBox(height: 12),
               _buildChipGroup(
@@ -244,6 +267,7 @@ class _PreferencesScreenState extends State<PreferencesScreen>
           const Text(
             'Your Preferences',
             style: TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,

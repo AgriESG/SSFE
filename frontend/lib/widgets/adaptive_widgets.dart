@@ -203,6 +203,18 @@ class SubstitutionCard extends StatelessWidget {
   final int? paretoRank;
   final bool isLowRealism;
 
+  /// Whether to show the optimiser's Pareto rank badge ("#2 Rank"). That
+  /// number means little without knowing what a Pareto frontier is, so it is
+  /// opt-in via the user's detail-level preference rather than shown on every
+  /// card by default.
+  final bool showRank;
+
+  /// Whether the user has explicitly accepted this swap. Swaps start
+  /// unapplied — nothing changes in the basket until this is true — so the
+  /// card needs its own visible confirmation rather than leaving the user to
+  /// scroll down and check the basket list to find out.
+  final bool accepted;
+
   const SubstitutionCard({
     super.key,
     required this.originalName,
@@ -216,6 +228,8 @@ class SubstitutionCard extends StatelessWidget {
     this.realismScore,
     this.paretoRank,
     this.isLowRealism = false,
+    this.showRank = false,
+    this.accepted = false,
   });
 
   // ---------------------------------------------------------------------------
@@ -305,9 +319,16 @@ class SubstitutionCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: accepted
+            ? AppColors.success.withValues(alpha: 0.04)
+            : AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        border: Border.all(
+          color: accepted
+              ? AppColors.success.withValues(alpha: 0.4)
+              : AppColors.border.withValues(alpha: 0.5),
+          width: accepted ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,8 +418,14 @@ class SubstitutionCard extends StatelessWidget {
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (accepted)
+                _intelligenceMarker(
+                  'Accepted',
+                  HugeIcons.strokeRoundedTick02,
+                  AppColors.success,
+                ),
               ...chips,
-              if (paretoRank != null)
+              if (paretoRank != null && showRank)
                 _intelligenceMarker(
                   '#$paretoRank Rank',
                   HugeIcons.strokeRoundedTarget02,
@@ -412,6 +439,17 @@ class SubstitutionCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (!accepted) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Tap to review and accept this swap',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -483,6 +521,7 @@ class SectionHeader extends StatelessWidget {
           Text(
             title,
             style: const TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -493,6 +532,7 @@ class SectionHeader extends StatelessWidget {
             Text(
               subtitle!,
               style: const TextStyle(
+                fontFamily: AppFonts.body,
                 fontSize: 14,
                 color: AppColors.textSecondary,
               ),

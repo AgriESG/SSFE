@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../models/user_preferences.dart';
 import '../widgets/adaptive_widgets.dart';
 import 'swap_detail_screen.dart';
 
 class SavingsImpactScreen extends StatefulWidget {
   final ApiOptimisationResult result;
+  final UserPreferences preferences;
 
-  const SavingsImpactScreen({super.key, required this.result});
+  const SavingsImpactScreen({
+    super.key,
+    required this.result,
+    required this.preferences,
+  });
 
   @override
   State<SavingsImpactScreen> createState() => _SavingsImpactScreenState();
@@ -123,6 +129,9 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
     return sp.grainPressure.isNotEmpty || sp.foodCategoryPressure.isNotEmpty;
   }
 
+  bool get _isDetailed =>
+      widget.preferences.detailLevel == DetailLevel.detailed;
+
   String get _heroHeadline {
     if (_basketGain >= _headlineBand) return 'Great Choices!';
     if (_basketGain <= -_headlineBand) return 'Mixed Result';
@@ -165,7 +174,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
               // Supply intelligence sits directly under the hero, before
               // the conventional cost/carbon/nutrition breakdown, because
               // it is the distinguishing dimension of the product.
-              if (_hasSupplyData) ...[
+              if (_hasSupplyData && _isDetailed) ...[
                 const SectionHeader(
                   title: 'UK Supply Intelligence',
                   subtitle: 'Why these swaps hold up against supply pressure',
@@ -173,12 +182,14 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                 _buildSupplyIntelligence(),
                 const SizedBox(height: 24),
               ],
-              const SectionHeader(
-                title: 'Your Improvement Breakdown',
-                subtitle: 'Score changes across every dimension',
-              ),
-              _buildImprovementGrid(),
-              const SizedBox(height: 24),
+              if (_isDetailed) ...[
+                const SectionHeader(
+                  title: 'Your Improvement Breakdown',
+                  subtitle: 'Score changes across every dimension',
+                ),
+                _buildImprovementGrid(),
+                const SizedBox(height: 24),
+              ],
               const SectionHeader(
                 title: 'Annual Projections',
                 subtitle: 'If you maintain these changes over a year',
@@ -195,7 +206,10 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => SwapDetailScreen(substitution: s),
+                          builder: (_) => SwapDetailScreen(
+                            substitution: s,
+                            preferences: widget.preferences,
+                          ),
                         ),
                       );
                     },
@@ -211,6 +225,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
                       realismScore: s.realismScore,
                       paretoRank: s.paretoRank,
                       isLowRealism: s.humanFlaggedLowRealism,
+                      showRank: _isDetailed,
                     ),
                   ),
                 ),
@@ -276,6 +291,7 @@ class _SavingsImpactScreenState extends State<SavingsImpactScreen>
           Text(
             _heroHeadline,
             style: const TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 24,
               fontWeight: FontWeight.w700,
               color: Colors.white,

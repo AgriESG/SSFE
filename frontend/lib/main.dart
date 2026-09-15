@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
+import 'models/user_preferences.dart';
+import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'services/preferences_store.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,21 +75,29 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeController.forward();
     _slideController.forward();
 
-    Future.delayed(const Duration(milliseconds: 2800), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const OnboardingScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 500),
-          ),
-        );
-      }
-    });
+    _resumeSession();
+  }
+
+  Future<void> _resumeSession() async {
+    final results = await Future.wait([
+      PreferencesStore.load(),
+      Future.delayed(const Duration(milliseconds: 2800)),
+    ]);
+    final savedPreferences = results[0] as UserPreferences?;
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            savedPreferences != null
+                ? HomeShell(preferences: savedPreferences)
+                : const OnboardingScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+    );
   }
 
   @override

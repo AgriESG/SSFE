@@ -12,8 +12,8 @@ dependencies:
   cupertino_icons: ^1.0.9
   fl_chart: ^1.2.0
   hugeicons: ^1.1.6
-  google_fonts: ^8.1.0
   http: ^1.6.0
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:
@@ -25,6 +25,25 @@ flutter:
   uses-material-design: true
   assets:
     - assets/data/food_knowledge_dataset.csv
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+          weight: 400
+        - asset: assets/fonts/Inter.ttf
+          weight: 500
+        - asset: assets/fonts/Inter.ttf
+          weight: 600
+        - asset: assets/fonts/Inter.ttf
+          weight: 700
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit.ttf
+          weight: 500
+        - asset: assets/fonts/Outfit.ttf
+          weight: 600
+        - asset: assets/fonts/Outfit.ttf
+          weight: 700
 
 flutter_launcher_icons:
   android: true

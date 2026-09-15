@@ -1,7 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'dart:io' show Platform;
+
+// ---------------------------------------------------------------------------
+// Fonts.
+//
+// Bundled as local assets (assets/fonts/) rather than fetched at runtime via
+// google_fonts. A font pulled over the network renders in the platform
+// fallback (San Francisco / Roboto) until the download completes, and on a
+// cold start that races with the API's own wake-up call — different pieces
+// of text can and did finish loading at different times, which is why the
+// app read as mismatched rather than as one consistent typeface. Bundling
+// removes the race entirely: every string uses the right font from the very
+// first frame.
+//
+// Both are variable fonts (a single file spanning the whole weight axis),
+// declared once per weight actually used in this app so FontWeight.w600
+// etc. below resolves to that weight rather than being synthetically bolded.
+// ---------------------------------------------------------------------------
+class AppFonts {
+  static const String heading = 'Outfit';
+  static const String body = 'Inter';
+}
 
 class AppColors {
   // Primary palette — earthy greens
@@ -67,59 +87,70 @@ class AppTheme {
 
   static TextTheme get _textTheme {
     return TextTheme(
-      displayLarge: GoogleFonts.outfit(
+      displayLarge: const TextStyle(
+        fontFamily: AppFonts.heading,
         fontSize: 32,
         fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
         letterSpacing: -0.5,
       ),
-      displayMedium: GoogleFonts.outfit(
+      displayMedium: const TextStyle(
+        fontFamily: AppFonts.heading,
         fontSize: 28,
         fontWeight: FontWeight.w700,
         color: AppColors.textPrimary,
         letterSpacing: -0.5,
       ),
-      headlineLarge: GoogleFonts.outfit(
+      headlineLarge: const TextStyle(
+        fontFamily: AppFonts.heading,
         fontSize: 24,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-      headlineMedium: GoogleFonts.outfit(
+      headlineMedium: const TextStyle(
+        fontFamily: AppFonts.heading,
         fontSize: 20,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-      titleLarge: GoogleFonts.outfit(
+      titleLarge: const TextStyle(
+        fontFamily: AppFonts.heading,
         fontSize: 18,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-      titleMedium: GoogleFonts.outfit(
+      titleMedium: const TextStyle(
+        fontFamily: AppFonts.heading,
         fontSize: 16,
         fontWeight: FontWeight.w500,
         color: AppColors.textPrimary,
       ),
-      bodyLarge: GoogleFonts.inter(
+      bodyLarge: const TextStyle(
+        fontFamily: AppFonts.body,
         fontSize: 16,
         fontWeight: FontWeight.w400,
         color: AppColors.textPrimary,
       ),
-      bodyMedium: GoogleFonts.inter(
+      bodyMedium: const TextStyle(
+        fontFamily: AppFonts.body,
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: AppColors.textSecondary,
       ),
-      bodySmall: GoogleFonts.inter(
+      bodySmall: const TextStyle(
+        fontFamily: AppFonts.body,
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: AppColors.textTertiary,
       ),
-      labelLarge: GoogleFonts.inter(
+      labelLarge: const TextStyle(
+        fontFamily: AppFonts.body,
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: AppColors.textPrimary,
       ),
-      labelMedium: GoogleFonts.inter(
+      labelMedium: const TextStyle(
+        fontFamily: AppFonts.body,
         fontSize: 12,
         fontWeight: FontWeight.w500,
         color: AppColors.textSecondary,
@@ -138,13 +169,17 @@ class AppTheme {
         error: AppColors.error,
       ),
       scaffoldBackgroundColor: AppColors.background,
+      // Safety net: any Text() with no ambient DefaultTextStyle at all
+      // still lands on Inter, never the platform default.
+      fontFamily: AppFonts.body,
       textTheme: _textTheme,
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 1,
-        titleTextStyle: GoogleFonts.outfit(
+        titleTextStyle: TextStyle(
+          fontFamily: AppFonts.heading,
           fontSize: 18,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
@@ -159,7 +194,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
+            fontFamily: AppFonts.body,
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
@@ -173,7 +209,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: const TextStyle(
+            fontFamily: AppFonts.body,
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),
@@ -190,7 +227,11 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surfaceVariant,
         selectedColor: AppColors.primary.withValues(alpha: 0.15),
-        labelStyle: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(
+          fontFamily: AppFonts.body,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -210,7 +251,8 @@ class AppTheme {
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        hintStyle: GoogleFonts.inter(
+        hintStyle: const TextStyle(
+          fontFamily: AppFonts.body,
           fontSize: 14,
           color: AppColors.textTertiary,
         ),
@@ -230,24 +272,28 @@ class AppTheme {
       primaryColor: AppColors.primary,
       barBackgroundColor: AppColors.surface.withValues(alpha: 0.94),
       scaffoldBackgroundColor: AppColors.background,
-      textTheme: CupertinoTextThemeData(
+      textTheme: const CupertinoTextThemeData(
         primaryColor: AppColors.primary,
-        navTitleTextStyle: GoogleFonts.outfit(
+        navTitleTextStyle: TextStyle(
+          fontFamily: AppFonts.heading,
           fontSize: 17,
           fontWeight: FontWeight.w600,
           color: AppColors.textPrimary,
         ),
-        navLargeTitleTextStyle: GoogleFonts.outfit(
+        navLargeTitleTextStyle: TextStyle(
+          fontFamily: AppFonts.heading,
           fontSize: 34,
           fontWeight: FontWeight.w700,
           color: AppColors.textPrimary,
           letterSpacing: -0.5,
         ),
-        textStyle: GoogleFonts.inter(
+        textStyle: TextStyle(
+          fontFamily: AppFonts.body,
           fontSize: 16,
           color: AppColors.textPrimary,
         ),
-        tabLabelTextStyle: GoogleFonts.inter(
+        tabLabelTextStyle: TextStyle(
+          fontFamily: AppFonts.body,
           fontSize: 10,
           fontWeight: FontWeight.w500,
         ),

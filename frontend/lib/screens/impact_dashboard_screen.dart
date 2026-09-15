@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../models/food_item.dart';
+import '../models/history_entry.dart';
 import '../models/user_preferences.dart';
 import '../services/api_service.dart';
+import '../services/history_store.dart';
 import '../widgets/adaptive_widgets.dart';
+import '../widgets/price_outlook_card.dart';
 import 'optimised_basket_screen.dart';
 
 class ImpactDashboardScreen extends StatefulWidget {
@@ -35,6 +38,16 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
   bool _isCalculating = true;
   String? _error;
 
+  // Recorded once per analysis so History has something to show, and kept
+  // around so a completed optimisation can update the same row with the
+  // swaps the user actually accepted rather than creating a second one.
+  String? _historyId;
+
+  // Basket-independent, fetched in parallel with the impact calculation so
+  // the one signal in the app with a forward lead time is visible before
+  // the user ever reaches the swap suggestions further down the funnel.
+  FeedCostOutlook? _feedOutlook;
+
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
 
@@ -50,12 +63,23 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
       curve: Curves.easeOutCubic,
     );
     _calculateImpact();
+    _loadFeedOutlook();
   }
 
   @override
   void dispose() {
     _animController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFeedOutlook() async {
+    try {
+      final outlook = await ApiService.getFeedCostPressure();
+      if (mounted) setState(() => _feedOutlook = outlook);
+    } catch (_) {
+      // No teaser rather than an error state — this is a bonus, not
+      // something worth blocking or retrying for.
+    }
   }
 
   Future<void> _calculateImpact() async {
@@ -98,6 +122,16 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
           _isCalculating = false;
         });
         _animController.forward();
+
+        _historyId = DateTime.now().microsecondsSinceEpoch.toString();
+        HistoryStore.upsert(HistoryEntry(
+          id: _historyId!,
+          timestamp: DateTime.now(),
+          itemCount: enrichedBasket.length,
+          itemNames: enrichedBasket.map((i) => i.name).toList(),
+          totalCost: cost,
+          totalCarbon: carbon,
+        ));
       }
     } catch (e) {
       if (mounted) {
@@ -115,6 +149,7 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
         builder: (_) => OptimisedBasketScreen(
           originalBasket: widget.basket,
           preferences: widget.preferences,
+          historyEntryId: _historyId,
         ),
       ),
     );
@@ -163,6 +198,7 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
           const Text(
             'Analysing your basket...',
             style: TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -197,9 +233,9 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             HugeIcon(
-              icon: HugeIcons.strokeRoundedAlert02,
-              color: AppColors.error,
-              size: 48,
+              icon: HugeIcons.strokeRoundedCloudLoading,
+              color: AppColors.warning,
+              size: 40,
             ),
             const SizedBox(height: 16),
             Text(
@@ -235,6 +271,13 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeroCard(),
+            if (_feedOutlook != null && _feedOutlook!.pressures.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              PriceOutlookTeaser(
+                outlook: _feedOutlook!,
+                onTap: _navigateToOptimise,
+              ),
+            ],
             const SizedBox(height: 24),
             const SectionHeader(
               title: 'Environmental Impact',
@@ -294,6 +337,7 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
           const Text(
             'Your Weekly Basket',
             style: TextStyle(
+              fontFamily: AppFonts.heading,
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -303,7 +347,7 @@ class _ImpactDashboardScreenState extends State<ImpactDashboardScreen>
           Row(
             children: [
               _heroStat(
-                '${_totalCarbon.toStringAsFixed(1)}',
+                _totalCarbon.toStringAsFixed(1),
                 'kg CO₂',
                 HugeIcons.strokeRoundedCloud,
               ),

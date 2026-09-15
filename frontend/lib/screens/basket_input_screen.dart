@@ -158,13 +158,35 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   // Basket operations
   // ---------------------------------------------------------------------------
 
-  void _addToBasket(FoodItem item) {
-    setState(() {
-      final idx = _basket.indexWhere((i) => i.id == item.id);
-      if (idx >= 0) {
+  // The /foods list endpoint that populates search results carries no
+  // price/carbon/nutrition data (see FoodItem.fromApiJson) — only the
+  // /foods/{id} detail endpoint does. Fetch that detail the first time an
+  // item is added so the basket, and everything computed from it downstream
+  // (optimised basket totals, insights), has real numbers instead of zeros.
+  Future<void> _addToBasket(FoodItem item) async {
+    final idx = _basket.indexWhere((i) => i.id == item.id);
+    if (idx >= 0) {
+      setState(() {
         _basket[idx] = _basket[idx].copyWith(quantity: _basket[idx].quantity + 1);
+      });
+      return;
+    }
+
+    FoodItem detailed;
+    try {
+      detailed = await ApiService.getFood(item.id);
+    } catch (_) {
+      detailed = item;
+    }
+    if (!mounted) return;
+
+    setState(() {
+      final existing = _basket.indexWhere((i) => i.id == item.id);
+      if (existing >= 0) {
+        _basket[existing] =
+            _basket[existing].copyWith(quantity: _basket[existing].quantity + 1);
       } else {
-        _basket.add(item.copyWith(quantity: 1));
+        _basket.add(detailed.copyWith(quantity: 1));
       }
     });
   }
@@ -188,7 +210,7 @@ class _BasketInputScreenState extends State<BasketInputScreen>
   // Paste mode — searches against loaded catalogue
   // ---------------------------------------------------------------------------
 
-  void _parsePastedList() {
+  Future<void> _parsePastedList() async {
     final text = _pasteController.text.trim();
     if (text.isEmpty) return;
 
@@ -205,7 +227,7 @@ class _BasketInputScreenState extends State<BasketInputScreen>
         (f) => f.name.toLowerCase().contains(lower),
       ).toList();
       if (match.isNotEmpty) {
-        _addToBasket(match.first);
+        await _addToBasket(match.first);
         added++;
       } else {
         unmatched++;
@@ -338,9 +360,9 @@ class _BasketInputScreenState extends State<BasketInputScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             HugeIcon(
-              icon: HugeIcons.strokeRoundedAlert02,
-              color: AppColors.error,
-              size: 48,
+              icon: HugeIcons.strokeRoundedCloudLoading,
+              color: AppColors.warning,
+              size: 40,
             ),
             const SizedBox(height: 16),
             Text(

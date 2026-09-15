@@ -3,12 +3,18 @@ import 'package:hugeicons/hugeicons.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../models/food_item.dart';
+import '../models/user_preferences.dart';
 import '../widgets/adaptive_widgets.dart';
 
 class SwapDetailScreen extends StatefulWidget {
   final ApiSubstitution substitution;
+  final UserPreferences preferences;
 
-  const SwapDetailScreen({super.key, required this.substitution});
+  const SwapDetailScreen({
+    super.key,
+    required this.substitution,
+    required this.preferences,
+  });
 
   @override
   State<SwapDetailScreen> createState() => _SwapDetailScreenState();
@@ -117,9 +123,9 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             HugeIcon(
-              icon: HugeIcons.strokeRoundedAlert02,
-              color: AppColors.error,
-              size: 48,
+              icon: HugeIcons.strokeRoundedCloudLoading,
+              color: AppColors.warning,
+              size: 40,
             ),
             const SizedBox(height: 16),
             Text(
@@ -202,8 +208,10 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
           _buildNutritionComparison(orig, swap),
           const SizedBox(height: 24),
 
-          _buildOptimisationInsights(),
-          const SizedBox(height: 32),
+          if (widget.preferences.detailLevel == DetailLevel.detailed) ...[
+            _buildOptimisationInsights(),
+            const SizedBox(height: 32),
+          ],
 
           AdaptiveButton(
             label: 'Accept This Swap',
@@ -414,6 +422,7 @@ class _SwapDetailScreenState extends State<SwapDetailScreen>
               const Text(
                 'Selection Rationale',
                 style: TextStyle(
+                  fontFamily: AppFonts.heading,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
