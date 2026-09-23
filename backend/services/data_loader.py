@@ -48,14 +48,14 @@ def load_food_data():
                         server happens to start in.
     """
     base_dir = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        os.path.dirname(os.path.abspath(__file__))
     )
     file_path = os.path.join(base_dir, DATASET_RELATIVE_PATH)
 
     if not os.path.exists(file_path):
         raise FileNotFoundError(
             f"Food dataset not found at {file_path}. "
-            f"Expected {DATASET_RELATIVE_PATH} relative to the repository root "
+            f"Expected {DATASET_RELATIVE_PATH} relative to backend/ "
             f"(resolved base: {base_dir})."
         )
 

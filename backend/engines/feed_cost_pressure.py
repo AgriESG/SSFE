@@ -192,9 +192,10 @@ def describe_pressure(result: Optional[dict]) -> str:
 SOYAMEAL_COLUMN = "Soyameal, Brazilian (48%) Ex-Store Liverpool £/tonne"
 
 # main.py lives in backend/api/, this module in backend/engines/, and the data
-# directory is a sibling of backend/. Three levels up from this file.
+# directory is backend/data/ — inside backend/ so Render's rootDir-scoped
+# auto-deploy actually notices when it changes. Two levels up from this file.
 _DEFAULT_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "data", "live", "UK_feed_ingredient_prices.xlsx",
 )
 

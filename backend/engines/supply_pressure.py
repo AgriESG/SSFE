@@ -85,7 +85,7 @@ from pathlib import Path
 # These two are AHDB balance sheets, so they live in data/live/. An earlier
 # version pointed at data/ directly and broke when those subfolders were
 # introduced.
-_BASE = Path(__file__).resolve().parent.parent.parent
+_BASE = Path(__file__).resolve().parent.parent
 SUPPLY_DEMAND_PATH = _BASE / "data" / "live" / "supply_demand.xlsx"
 ANIMAL_FEED_PATH = _BASE / "data" / "live" / "animal_feed_production.xlsx"
 

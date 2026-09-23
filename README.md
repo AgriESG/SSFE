@@ -50,25 +50,26 @@ backend/
     feed_cost_pressure.py
   services/
     data_loader.py        workbook loading, held in memory at startup
-
-data/
-  live/                   weekly refresh from AHDB
+  data/
+    live/                  weekly refresh from AHDB
                           cereal balance sheets, feed ingredient prices,
                           animal feed production
-  reference/              food knowledge dataset
+    reference/             food knowledge dataset
                           113 foods, 164 substitution pairs, supply_category
                           mapping, retailer prices with source URLs
-  validation/             frozen snapshots and backtest scripts
+    validation/            frozen snapshots and backtest scripts
                           feed_lead_lag.py, feed_lead_lag.md
 
 frontend/                 Flutter iOS client
 ```
 
+`data/` lives inside `backend/`, not beside it. Render's `rootDir` for this service is `backend`, and its auto-deploy-on-push only evaluates commits that touch files under that root — a data-only refresh outside it is invisible to the trigger and silently never deploys. This bit us once; keeping the data the engines actually read inside the watched root is what makes a weekly AHDB refresh reliably go live on push instead of requiring someone to notice and deploy manually.
+
 ### Why there is no database
 
 Reference data is read-only, small enough to hold in memory, and refreshed weekly rather than written to. A relational store would add operational overhead and migration burden for no gain.
 
-It also matters for reproducibility. Published correlation and p-values in `data/validation` were computed against exactly the bytes in that directory. That claim is straightforward to make about versioned files and difficult to make about a mutable database.
+It also matters for reproducibility. Published correlation and p-values in `backend/data/validation` were computed against exactly the bytes in that directory. That claim is straightforward to make about versioned files and difficult to make about a mutable database.
 
 Runtime counters live in Redis, which is the one place persistence is genuinely needed.
 
@@ -128,11 +129,11 @@ Empty baskets return 400. Unknown food codes are reported in a `not_found` list 
 
 Three directories, deliberately separated.
 
-**`data/live`** refreshes weekly from AHDB. Stage 2 and the feed cost engine read from here.
+**`backend/data/live`** refreshes weekly from AHDB. Stage 2 and the feed cost engine read from here.
 
-**`data/reference`** holds the food knowledge dataset. Every food carries a `footprint_method` flag marking its value as `direct`, `proxy: <source>` or `derived: <recipe>`, so no proxy is undeclared. Composite products derive their footprint from declared QUID label percentages against Poore and Nemecek commodity values, using ingoing raw mass. Assumptions behind each derived value are recorded per row.
+**`backend/data/reference`** holds the food knowledge dataset. Every food carries a `footprint_method` flag marking its value as `direct`, `proxy: <source>` or `derived: <recipe>`, so no proxy is undeclared. Composite products derive their footprint from declared QUID label percentages against Poore and Nemecek commodity values, using ingoing raw mass. Assumptions behind each derived value are recorded per row.
 
-**`data/validation`** holds frozen snapshots. These are not refreshed. Published statistics were computed against exactly these files, and refreshing them would silently break that correspondence.
+**`backend/data/validation`** holds frozen snapshots. These are not refreshed. Published statistics were computed against exactly these files, and refreshing them would silently break that correspondence.
 
 ### Data provenance
 
@@ -142,7 +143,7 @@ Source market data is published by the Agriculture and Horticulture Development 
 
 ## Validation
 
-`data/validation/feed_lead_lag.md` documents an empirical study of how feed costs propagate to retail prices, reproducible via `feed_lead_lag.py`.
+`backend/data/validation/feed_lead_lag.md` documents an empirical study of how feed costs propagate to retail prices, reproducible via `feed_lead_lag.py`.
 
 The chain is validated link by link rather than end to end.
 
