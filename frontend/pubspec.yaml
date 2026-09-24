@@ -1,7 +1,7 @@
 name: agriesg
 description: "AgriESG Food Optimisation Engine"
 publish_to: 'none'
-version: 0.1.0+4
+version: 0.1.0+6
 
 environment:
   sdk: ^3.11.1
