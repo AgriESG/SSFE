@@ -1013,11 +1013,14 @@ def feed_cost_pressure_endpoint():
         "feed_cost_pressure": results,
         "explanations": {c: describe_pressure(r) for c, r in results.items()},
         "validated_categories": sorted(FEED_VALIDATED_CATEGORIES),
-        "untested_categories": ["poultry", "beef", "dairy", "eggs"],
-        "note": "Beef was tested and showed no significant relationship at any lag "
-                "from 8 weeks to 2 years; feed is a small share of UK beef production "
-                "cost. Poultry, dairy and eggs are untested. See "
-                "data/validation/feed_lead_lag.md.",
+        "tested_no_evidence_categories": ["beef"],
+        "untested_categories": ["poultry", "dairy", "eggs"],
+        "note": "Beef was tested at lags from 8 weeks to 2 years and showed no reliable "
+                "relationship between feed cost and farm-gate cattle prices. One series "
+                "(cull cows, 91 weeks, p = 0.039) crossed p < 0.05 but is negatively signed "
+                "and expected by chance across 30 tests, so it is not reported as a finding. "
+                "Feed is a small share of UK beef production cost. Poultry, dairy and eggs "
+                "are untested. See data/validation/feed_lead_lag.md.",
     }
 
 
@@ -1057,8 +1060,8 @@ def supply_pressure():
     get_data()
     cat_pressure = _supply_pressure.get("food_category_pressure", {}) or {}
 
-    # Categories sitting on the neutral default have no free stock series
-    # published in the balance sheets. Naming them explicitly keeps a reader
+    # Categories sitting on the neutral default have too little free stock
+    # data to score (or no scored grain behind them). Naming them explicitly keeps a reader
     # from mistaking an absent series for a mid-range measurement.
     no_data_categories = [
         c for c, p in cat_pressure.items()
@@ -1071,9 +1074,10 @@ def supply_pressure():
         "no_data_categories": no_data_categories,
         "description": "Supply pressure scores derived from AHDB UK cereal balance sheet data. "
                        "Higher score = more supply pressure = greater price volatility risk. "
-                       f"A score of exactly {NEUTRAL_PRESSURE} means no free stock series is "
-                       "published for that commodity, so it is treated neutrally rather than "
-                       "penalised.",
+                       f"A score of exactly {NEUTRAL_PRESSURE} is a placeholder, not a measurement: "
+                       "it is returned when a grain has fewer than three crop years of free stock "
+                       "data, or a category maps to no scored grain. Such categories are listed in "
+                       "no_data_categories and treated neutrally rather than penalised.",
     }
 
 

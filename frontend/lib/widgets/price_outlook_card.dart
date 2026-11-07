@@ -160,8 +160,13 @@ class PriceOutlookCard extends StatelessWidget {
             if (p.asOf.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
-                'Feed price as of ${p.asOf}',
-                style: const TextStyle(fontSize: 10, color: AppColors.textTertiary),
+                p.stale
+                    ? 'Feed price as of ${p.asOf} — not yet refreshed, may be out of date'
+                    : 'Feed price as of ${p.asOf}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: p.stale ? AppColors.warning : AppColors.textTertiary,
+                ),
               ),
             ],
           ],

@@ -94,6 +94,7 @@ class ApiFeedCostPressure {
   final double pctChange13w;
   final List<int> leadHorizonWeeks;
   final String asOf;
+  final bool stale;
 
   ApiFeedCostPressure({
     required this.category,
@@ -102,6 +103,7 @@ class ApiFeedCostPressure {
     required this.pctChange13w,
     required this.leadHorizonWeeks,
     required this.asOf,
+    this.stale = false,
   });
 
   factory ApiFeedCostPressure.fromJson(Map<String, dynamic> j) =>
@@ -114,6 +116,7 @@ class ApiFeedCostPressure {
             .map((v) => (v ?? 0) as int)
             .toList(),
         asOf: (j['as_of'] ?? '').toString(),
+        stale: j['stale'] == true,
       );
 }
 

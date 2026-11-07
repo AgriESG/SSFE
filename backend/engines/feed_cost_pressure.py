@@ -56,6 +56,7 @@ KNOWN LIMITATIONS
 
 from __future__ import annotations
 
+import datetime as _dt
 import math
 import os
 from typing import Optional
@@ -178,6 +179,10 @@ def describe_pressure(result: Optional[dict]) -> str:
         f"{abs(result['pct_change_13w']):.1f}% over 13 weeks. "
         f"Historically this has led {result['category']} farm-gate prices "
         f"by {lo}-{hi} weeks."
+    ) + (
+        f" Note: this feed price is {result['days_old']} days old and has not "
+        f"been refreshed since {result['as_of']}."
+        if result.get("stale") else ""
     )
 
 
@@ -256,4 +261,20 @@ def current_feed_pressure(
         result["price_now"] = round(now, 2)
         result["price_13w_ago"] = round(then, 2)
         result["as_of"] = weekly.index[-1].date().isoformat()
+        result.update(staleness(weekly.index[-1].date()))
     return result
+
+
+# AHDB publishes each Monday for the previous Friday, so a current file is at
+# most about nine days old. Two weeks means at least one refresh was missed.
+STALE_AFTER_DAYS = 14
+
+
+def staleness(as_of: _dt.date, today: Optional[_dt.date] = None) -> dict:
+    """
+    How old the live feed reading is. The file is refreshed by hand, so a
+    missed week has to show up in the response rather than pass silently as
+    current data.
+    """
+    days_old = ((today or _dt.date.today()) - as_of).days
+    return {"days_old": days_old, "stale": days_old > STALE_AFTER_DAYS}
