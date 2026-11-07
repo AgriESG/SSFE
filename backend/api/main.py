@@ -1017,8 +1017,8 @@ def feed_cost_pressure_endpoint():
         "untested_categories": ["poultry", "dairy", "eggs"],
         "note": "Beef was tested at lags from 8 weeks to 2 years and showed no reliable "
                 "relationship between feed cost and farm-gate cattle prices. One series "
-                "(cull cows, 91 weeks, p = 0.039) crossed p < 0.05 but is negatively signed "
-                "and expected by chance across 30 tests, so it is not reported as a finding. "
+                "(cull cows, 91 weeks, p = 0.039) fell below 0.05 but is negatively signed "
+                "and expected by chance across 30 tests, so it is not treated as a finding. "
                 "Feed is a small share of UK beef production cost. Poultry, dairy and eggs "
                 "are untested. See data/validation/feed_lead_lag.md.",
     }
