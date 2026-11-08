@@ -1,8 +1,13 @@
 """
 Feed Cost Pressure — AgriESG
 =============================
-A second, faster-moving supply pressure component, derived from AHDB UK feed
+A separate, faster-moving forward signal, derived from AHDB UK feed
 ingredient prices rather than annual balance sheets.
+
+It is display only. It is served by /feed-cost-pressure and shown on the
+app's Price Outlook card, and it does not enter the Supply Pressure Index or
+the optimiser: pork's supply score and swap rankings come from the cereal
+balance sheets alone.
 
 WHAT THIS MEASURES
 ------------------
@@ -11,8 +16,8 @@ moves, producers adjust breeding and retention, and that works through to the
 slaughter market at the speed the animals grow. So a change in protein feed
 price today carries information about farm-gate pig price several months out.
 
-VALIDATION (see docs/feed_lead_lag.md for the full working)
------------------------------------------------------------
+VALIDATION (see data/validation/feed_lead_lag.md for the full working)
+----------------------------------------------------------------------
 Tested on AHDB UK feed ingredient prices (weekly, Jan 2015 to Jul 2026) against
 AHDB GB deadweight pig price, SPP EU spec (weekly, 2014 to 2026).
 
@@ -48,8 +53,10 @@ series before it is added here.
 KNOWN LIMITATIONS
 -----------------
   r = 0.38 explains about 15% of variance. A real signal, not a strong one.
-  Tested against farm-gate deadweight price, not retail shelf price. The
-    farm-gate to retail link is untested.
+  Validated against farm-gate deadweight price. Farm-gate to retail is a
+    separate link (pork peaks at 8 weeks, r = +0.43, p = 0.024); feed cost
+    tested directly against retail pork is not significant, so the feed-to-
+    shelf chain is described link by link, not as one established effect.
   Rapemeal quotes stop on 16 Jan 2026, so the live signal runs on soyameal
     alone. Rapemeal remains the historical corroboration, not a live input.
 """
