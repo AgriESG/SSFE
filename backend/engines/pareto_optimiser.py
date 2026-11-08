@@ -82,6 +82,9 @@ NUTRITION_WEIGHTS = {
 # Design decision: fixed at 0.15 to ensure it influences but does
 # not dominate recommendations when user has strong budget or
 # sustainability preferences
+# This is the raw weight. After build_preference_weights normalises all four
+# to sum to 1.0, supply's actual share is 0.15 / 0.85 = 17.6% for default
+# preferences, and ranges from 12% to 27% depending on user settings.
 SUPPLY_STABILITY_WEIGHT = 0.15
 
 
