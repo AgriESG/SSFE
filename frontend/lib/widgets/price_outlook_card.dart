@@ -75,7 +75,7 @@ class PriceOutlookCard extends StatelessWidget {
             const SizedBox(height: 6),
             const Text(
               "Where a swap ingredient's cost is headed, based on a lead "
-              "indicator with a proven historical lag — not a forecast for "
+              "indicator with a validated historical lag — not a forecast for "
               'everything in your basket.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
