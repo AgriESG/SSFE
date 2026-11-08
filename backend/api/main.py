@@ -432,11 +432,13 @@ def build_rationale(
     separates a recommendation from a sales pitch, and it is checkable
     against the delta fields in the same response.
     """
+    # Signs follow the delta fields: positive is an improvement on that
+    # dimension, negative a trade-off, so each figure reconciles directly.
     parts = []
     if env_d >= SCORE_CLAIM_THRESHOLD:
-        parts.append(f"lower environmental impact (-{env_d:.0f} pts)")
+        parts.append(f"lower environmental impact (+{env_d:.0f} pts)")
     if cost_d >= SCORE_CLAIM_THRESHOLD:
-        parts.append(f"cheaper (-{cost_d:.0f} cost pts)")
+        parts.append(f"cheaper (+{cost_d:.0f} cost pts)")
     if nut_d >= SCORE_CLAIM_THRESHOLD:
         parts.append(f"better nutrition (+{nut_d:.0f} pts)")
     if supply_clause:
@@ -444,9 +446,9 @@ def build_rationale(
 
     tradeoffs = []
     if env_d <= -SCORE_CLAIM_THRESHOLD:
-        tradeoffs.append(f"higher carbon (+{abs(env_d):.0f} pts)")
+        tradeoffs.append(f"higher carbon (-{abs(env_d):.0f} pts)")
     if cost_d <= -SCORE_CLAIM_THRESHOLD:
-        tradeoffs.append(f"pricier (+{abs(cost_d):.0f} cost pts)")
+        tradeoffs.append(f"pricier (-{abs(cost_d):.0f} cost pts)")
     if nut_d <= -SCORE_CLAIM_THRESHOLD:
         tradeoffs.append(f"less nutrient dense ({nut_d:.0f} pts)")
 
@@ -1060,7 +1062,7 @@ def supply_pressure():
     get_data()
     cat_pressure = _supply_pressure.get("food_category_pressure", {}) or {}
 
-    # Categories sitting on the neutral default have too little free stock
+    # Categories sitting on the neutral default have too little stock
     # data to score (or no scored grain behind them). Naming them explicitly keeps a reader
     # from mistaking an absent series for a mid-range measurement.
     no_data_categories = [
@@ -1073,9 +1075,9 @@ def supply_pressure():
         "neutral_default": NEUTRAL_PRESSURE,
         "no_data_categories": no_data_categories,
         "description": "Supply pressure scores derived from AHDB UK cereal balance sheet data. "
-                       "Higher score = more supply pressure = greater price volatility risk. "
+                       "Higher score = tighter supply relative to its own history. "
                        f"A score of exactly {NEUTRAL_PRESSURE} is a placeholder, not a measurement: "
-                       "it is returned when a grain has fewer than three crop years of free stock "
+                       "it is returned when a grain has fewer than three crop years of stock "
                        "data, or a category maps to no scored grain. Such categories are listed in "
                        "no_data_categories and treated neutrally rather than penalised.",
     }

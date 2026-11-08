@@ -129,7 +129,7 @@ Empty baskets return 400. Unknown food codes are reported in a `not_found` list 
 
 Three directories, deliberately separated.
 
-**`backend/data/live`** refreshes weekly from AHDB. Stage 2 and the feed cost engine read from here.
+**`backend/data/live`** holds the latest AHDB files, refreshed manually (feed prices via `scripts/refresh_feed.sh` after AHDB's Monday publication; `/feed-cost-pressure` reports `stale` if the reading is over 14 days old). Stage 2 and the feed cost engine read from here.
 
 **`backend/data/reference`** holds the food knowledge dataset. Every food carries a `footprint_method` flag marking its value as `direct`, `proxy: <source>` or `derived: <recipe>`, so no proxy is undeclared. Composite products derive their footprint from declared QUID label percentages against Poore and Nemecek commodity values, using ingoing raw mass. Assumptions behind each derived value are recorded per row.
 
